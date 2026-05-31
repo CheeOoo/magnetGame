@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fridge Poetry</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f5f4f0;
+    --surface: #ffffff;
+    --border: #d6d4cc;
+    --border-mid: #b8b6ae;
+    --text: #1a1a1a;
+    --text-muted: #888880;
+    --magnet-bg: #ffffff;
+    --magnet-border: #c8c6be;
+    --magnet-shadow: #e0ded8;
+    --readonly-bg: #f0efe9;
+    --header-own: #1a1a1a;
+    --header-watch: #888880;
+    --sidebar-bg: #eceae4;
+  }
+
+  html, body { height: 100%; overflow: hidden; }
+
+  body {
+    font-family: 'Courier New', Courier, monospace;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* ── Lobby ── */
+  #lobby {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    gap: 24px;
+  }
+
+  #lobby h1 {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+
+  #lobby p {
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+    max-width: 340px;
+    line-height: 1.6;
+  }
+
+  .lbtn {
+    padding: 9px 20px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 13px;
+    font-weight: 700;
+    border: 1.5px solid var(--text);
+    background: var(--text);
+    color: var(--surface);
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+  }
+  .lbtn:hover { opacity: 0.85; }
+  .lbtn.secondary {
+    background: transparent;
+    color: var(--text);
+  }
+
+  #room-input-wrap {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  #room-code-input {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 13px;
+    padding: 8px 12px;
+    border: 1.5px solid var(--border-mid);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--text);
+    width: 160px;
+    text-transform: lowercase;
+  }
+  #room-code-input:focus { outline: none; border-color: var(--text); }
+
+  #lobby-status {
+    font-size: 12px;
+    color: var(--text-muted);
+    min-height: 16px;
+    text-align: center;
+  }
+
+  #share-wrap {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  #share-wrap.visible { display: flex; }
+  #share-url {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 11px;
+    padding: 7px 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--text-muted);
+    width: 320px;
+    text-align: center;
+    cursor: pointer;
+  }
+  #share-hint { font-size: 11px; color: var(--text-muted); }
+
+  .divider-text {
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.06em;
+  }
+
+  /* ── Game ── */
+  #game {
+    display: none;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+  #game.visible { display: flex; }
+
+  .player-view {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .player-view + .player-view {
+    border-top: 2px solid var(--border-mid);
+  }
+
+  .half {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+  }
+  .half + .half { border-left: 1px solid var(--border-mid); }
+
+  .half-head {
+    padding: 5px 10px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    background: var(--sidebar-bg);
+  }
+  .half-head.own { color: var(--header-own); }
+  .half-head.watch { color: var(--header-watch); background: var(--readonly-bg); }
+
+  .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: currentColor; opacity: 0.5; flex-shrink: 0;
+  }
+  .dot.live { background: #22c55e; opacity: 1; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .board-row { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+
+  .board {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: var(--surface);
+    min-width: 0;
+  }
+  .board.readonly { background: var(--readonly-bg); }
+
+  .readonly-label {
+    position: absolute;
+    bottom: 6px;
+    right: 8px;
+    font-size: 9px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .sidebar {
+    width: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 0;
+    background: var(--sidebar-bg);
+    border-left: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .sidebar.left-side { border-left: none; border-right: 1px solid var(--border); }
+
+  .sbtn {
+    width: 24px; height: 24px;
+    border-radius: 3px;
+    border: 1px solid var(--border-mid);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 0;
+    line-height: 1;
+    transition: background 0.1s;
+  }
+  .sbtn:hover { background: var(--bg); }
+  .sbtn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  .sep { width: 16px; height: 1px; background: var(--border); }
+
+  /* ── Magnets ── */
+  .magnet {
+    position: absolute;
+    padding: 3px 7px;
+    border-radius: 2px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    user-select: none;
+    white-space: nowrap;
+    background: var(--magnet-bg);
+    border: 1px solid var(--magnet-border);
+    color: var(--text);
+    z-index: 2;
+    letter-spacing: 0.02em;
+  }
+  .magnet.draggable { cursor: grab; }
+  .magnet.draggable:active { cursor: grabbing; }
+  .magnet.readonly { pointer-events: none; opacity: 0.6; }
+  .magnet.punct { color: var(--text); font-size: 13px; min-width: 20px; text-align: center; }
+
+  /* ── Waiting overlay ── */
+  #waiting {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(245,244,240,0.92);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+    font-family: 'Courier New', Courier, monospace;
+  }
+  #waiting.visible { display: flex; }
+  #waiting p { font-size: 13px; color: var(--text-muted); }
+  #waiting strong { font-size: 15px; }
+  #waiting-url {
+    font-size: 11px;
+    padding: 7px 14px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<!-- Lobby -->
+<div id="lobby">
+  <h1>⬜ fridge poetry</h1>
+  <p>Create a room and share the link with your friend, or paste a room code to join theirs.</p>
+  <button class="lbtn" onclick="createRoom()">Create new room</button>
+  <span class="divider-text">— or —</span>
+  <div id="room-input-wrap">
+    <input id="room-code-input" type="text" placeholder="paste room code..." maxlength="8">
+    <button class="lbtn secondary" onclick="joinFromInput()">Join</button>
+  </div>
+  <div id="share-wrap">
+    <input id="share-url" type="text" readonly onclick="copyShareUrl()" title="Click to copy">
+    <span id="share-hint">click to copy — share with your friend</span>
+  </div>
+  <div id="lobby-status"></div>
+</div>
+
+<!-- Waiting for opponent -->
+<div id="waiting">
+  <strong>Waiting for your friend...</strong>
+  <p>Share this link:</p>
+  <div id="waiting-url" onclick="copyShareUrl()"></div>
+  <p style="font-size:11px;">click to copy</p>
+</div>
+
+<!-- Game -->
+<div id="game">
+  <!-- View for player 0: own board left, opponent right -->
+  <div class="player-view" id="view-0">
+    <div class="half" id="half-0-own">
+      <div class="half-head own">
+        <span class="dot"></span>
+        <span id="label-0-own">your board</span>
+      </div>
+      <div class="board-row">
+        <div class="board" id="board-0"></div>
+        <div class="sidebar" id="sb-0">
+          <button class="sbtn punct" title="Comma" onclick="spawnPunct(0,',')"><span>,</span></button>
+          <button class="sbtn punct" title="Period" onclick="spawnPunct(0,'.')"><span>.</span></button>
+          <button class="sbtn punct" title="Question mark" onclick="spawnPunct(0,'?')"><span>?</span></button>
+          <div class="sep"></div>
+          <button class="sbtn" title="5 more words" onclick="addMore(0)">
+            <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button class="sbtn" title="Reset board" onclick="resetMyBoard(0)">
+            <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="half" id="half-0-watch">
+      <div class="half-head watch">
+        <span class="dot live" id="dot-0"></span>
+        <span id="label-0-watch">waiting for opponent...</span>
+      </div>
+      <div class="board readonly" id="watch-0">
+        <span class="readonly-label">read only</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- View for player 1: opponent left, own board right -->
+  <div class="player-view" id="view-1">
+    <div class="half" id="half-1-watch">
+      <div class="half-head watch">
+        <span class="dot live" id="dot-1"></span>
+        <span id="label-1-watch">waiting for opponent...</span>
+      </div>
+      <div class="board readonly" id="watch-1">
+        <span class="readonly-label">read only</span>
+      </div>
+    </div>
+    <div class="half" id="half-1-own">
+      <div class="half-head own">
+        <span class="dot"></span>
+        <span id="label-1-own">your board</span>
+      </div>
+      <div class="board-row">
+        <div class="sidebar left-side" id="sb-1">
+          <button class="sbtn punct" title="Comma" onclick="spawnPunct(1,',')"><span>,</span></button>
+          <button class="sbtn punct" title="Period" onclick="spawnPunct(1,'.')"><span>.</span></button>
+          <button class="sbtn punct" title="Question mark" onclick="spawnPunct(1,'?')"><span>?</span></button>
+          <div class="sep"></div>
+          <button class="sbtn" title="5 more words" onclick="addMore(1)">
+            <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button class="sbtn" title="Reset board" onclick="resetMyBoard(1)">
+            <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
+          </button>
+        </div>
+        <div class="board" id="board-1"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const WORD_POOL = [...new Set(`i to tie run red team above thief am n't yes raw are hint maybe crown a and but why into none would heart an the cry call salt with could bounce if you map time under which should or who few long there other around of she far est soon first shout people s him too part later whole person er her keep glue house short always at not over pain leave piece shaken es was say some jump sever reach devote he use ink them love never touch across be out aid they than about place shatter me had fig each have peace stoop whisper my how hat make hear river their shadow it now top many wait storm swing monkey up bay sit this grab lose quiet yellow in war from take said grand safety do all let like that join strife coiled no go been word skull plant stream we one down seek stay smoke library stop only find quote habit ed joy lay toil leaf punk fault savor boo cold hold bone steal whale cod quit star blood monk til pink yelp look raven queen pay day dig glass then song knife is lap box stab your gold burst patron born almost delicious candy haunt has eternity less ing hot old morning moist mist lip life prisoner velvet universe poison will when young you blue naked angel woman warm surround run runs running ran walk walks walking jumped fall falls falling fell smile smiles smiling smiled sing sings singing sang dream dreams dreaming dreamed sleep sleeps sleeping slept listen listens listening listened whispers whispering whispered love loves loving loved hate hates hating hated remember remembers remembered forget forgets forgotten finds finding found lose loses losing lost break breaks breaking broke hold holds holding held speak speaks speaking spoke moon sun stars light dark shadow night sky cloud clouds rain snow wind storm fire water forest tree trees leaf leaves flower flowers stone stones river ocean mountain field road door window room heart soul mind eye eyes hand hands voice name moment year world earth life death hope fear joy pain truth lie memory silence mother father child man woman friend stranger car city street bridge train sea boat bird birds chocolate honey salt silver iron glass mirror mean deep bright soft hard young slow fast still broken whole empty full free warm beautiful strange wild gentle sharp bitter sweet slowly quickly quietly softly deeply gently suddenly forever together apart inside outside above below`.split(/\s+/).filter(Boolean))];
+
+function shuffle(a) {
+  const b = [...a];
+  for (let i = b.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [b[i], b[j]] = [b[j], b[i]];
+  }
+  return b;
+}
+
+// ── State ──
+let ws = null;
+let myPlayerIndex = null;
+let roomId = null;
+let maxZ = 100;
+let sendThrottle = null;
+
+const boards = [document.getElementById('board-0'), document.getElementById('board-1')];
+const watches = [document.getElementById('watch-0'), document.getElementById('watch-1')];
+
+// ── Routing: check URL for room on load ──
+window.addEventListener('DOMContentLoaded', () => {
+  const params = new URLSearchParams(window.location.search);
+  const r = params.get('room');
+  if (r) {
+    document.getElementById('room-code-input').value = r;
+    joinRoom(r);
+  }
+});
+
+// ── Lobby ──
+function setStatus(msg) {
+  document.getElementById('lobby-status').textContent = msg;
+}
+
+async function createRoom() {
+  setStatus('Creating room...');
+  try {
+    const res = await fetch('/new');
+    const data = await res.json();
+    roomId = data.roomId;
+    const url = `${window.location.origin}?room=${roomId}`;
+    document.getElementById('share-url').value = url;
+    document.getElementById('waiting-url').textContent = url;
+    document.getElementById('share-wrap').classList.add('visible');
+    setStatus('Room created! Share the link above.');
+    joinRoom(roomId);
+  } catch (e) {
+    setStatus('Could not reach server.');
+  }
+}
+
+function joinFromInput() {
+  const code = document.getElementById('room-code-input').value.trim().toLowerCase();
+  if (!code) return;
+  roomId = code;
+  joinRoom(code);
+}
+
+function copyShareUrl() {
+  const url = document.getElementById('share-url').value || document.getElementById('waiting-url').textContent;
+  navigator.clipboard.writeText(url).then(() => {
+    document.getElementById('share-hint').textContent = 'copied!';
+    setTimeout(() => document.getElementById('share-hint').textContent = 'click to copy — share with your friend', 2000);
+  });
+}
+
+// ── WebSocket ──
+function joinRoom(id) {
+  roomId = id;
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const wsUrl = `${proto}://${location.host}?room=${id}`;
+  ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => {
+    window.history.replaceState({}, '', `?room=${id}`);
+  };
+
+  ws.onmessage = (evt) => {
+    const msg = JSON.parse(evt.data);
+    handleMessage(msg);
+  };
+
+  ws.onclose = () => {
+    setStatus('Disconnected. Refresh to reconnect.');
+  };
+
+  ws.onerror = () => {
+    setStatus('Connection error.');
+  };
+}
+
+function handleMessage(msg) {
+  if (msg.type === 'error') {
+    setStatus(msg.message);
+    return;
+  }
+
+  if (msg.type === 'init') {
+    myPlayerIndex = msg.playerIndex;
+    document.getElementById('lobby').style.display = 'none';
+    document.getElementById('game').classList.add('visible');
+
+    // Show only the relevant player view
+    document.getElementById('view-0').style.display = myPlayerIndex === 0 ? 'flex' : 'none';
+    document.getElementById('view-1').style.display = myPlayerIndex === 1 ? 'flex' : 'none';
+
+    // Spawn own board
+    spawnBoard(myPlayerIndex);
+
+    // Restore opponent board if already in state
+    const opponentIdx = 1 - myPlayerIndex;
+    if (msg.state && msg.state[opponentIdx] && msg.state[opponentIdx].length > 0) {
+      renderWatch(opponentIdx, msg.state[opponentIdx]);
+      setOpponentLabel(opponentIdx, true);
+    } else {
+      document.getElementById('waiting').classList.add('visible');
+    }
+
+    const url = `${window.location.origin}?room=${roomId}`;
+    document.getElementById('waiting-url').textContent = url;
+    document.getElementById('share-url').value = url;
+  }
+
+  if (msg.type === 'player_joined') {
+    if (msg.count === 2) {
+      document.getElementById('waiting').classList.remove('visible');
+      const opponentIdx = 1 - myPlayerIndex;
+      setOpponentLabel(opponentIdx, true);
+    }
+  }
+
+  if (msg.type === 'player_left') {
+    const opponentIdx = 1 - myPlayerIndex;
+    setOpponentLabel(opponentIdx, false);
+  }
+
+  if (msg.type === 'board_update') {
+    if (msg.playerIndex !== myPlayerIndex) {
+      renderWatch(msg.playerIndex, msg.magnets);
+    }
+  }
+
+  if (msg.type === 'reset') {
+    if (msg.playerIndex !== myPlayerIndex) {
+      renderWatch(msg.playerIndex, []);
+    }
+  }
+}
+
+function setOpponentLabel(opponentIdx, online) {
+  const labelId = myPlayerIndex === 0 ? 'label-0-watch' : 'label-1-watch';
+  const dotId = myPlayerIndex === 0 ? 'dot-0' : 'dot-1';
+  document.getElementById(labelId).textContent = online ? `player ${opponentIdx + 1}'s board — live` : 'opponent disconnected';
+  const dot = document.getElementById(dotId);
+  dot.classList.toggle('live', online);
+}
+
+// ── Board rendering ──
+function spawnBoard(playerIdx) {
+  const board = boards[playerIdx];
+  [...board.querySelectorAll('.magnet')].forEach(m => m.remove());
+  const bw = board.clientWidth || 400;
+  const bh = board.clientHeight || 300;
+  const words = shuffle(WORD_POOL).slice(0, 47);
+  words.forEach(w => {
+    const x = 10 + Math.random() * Math.max(bw - 120, 40);
+    const y = 10 + Math.random() * Math.max(bh - 30, 40);
+    createMagnetEl(playerIdx, w, false, x, y);
+  });
+  broadcastBoard(playerIdx);
+}
+
+function createMagnetEl(playerIdx, word, isPunct, x, y) {
+  const el = document.createElement('div');
+  el.className = 'magnet draggable' + (isPunct ? ' punct' : '');
+  el.textContent = word;
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  el.style.zIndex = ++maxZ;
+  makeDraggable(el, boards[playerIdx], playerIdx);
+  boards[playerIdx].appendChild(el);
+  return el;
+}
+
+function renderWatch(fromPlayer, magnets) {
+  const watchBoard = watches[fromPlayer];
+  const label = watchBoard.querySelector('.readonly-label');
+  watchBoard.innerHTML = '';
+  if (label) watchBoard.appendChild(label);
+  const bw = watchBoard.clientWidth || 400;
+  const bh = watchBoard.clientHeight || 300;
+  magnets.forEach(m => {
+    const el = document.createElement('div');
+    el.className = 'magnet readonly' + (m.punct ? ' punct' : '');
+    el.textContent = m.word;
+    el.style.left = (m.xPct * bw) + 'px';
+    el.style.top = (m.yPct * bh) + 'px';
+    el.style.zIndex = m.z || 2;
+    watchBoard.appendChild(el);
+  });
+}
+
+function serializeBoard(playerIdx) {
+  const board = boards[playerIdx];
+  const bw = board.clientWidth || 1;
+  const bh = board.clientHeight || 1;
+  return [...board.querySelectorAll('.magnet')].map(el => ({
+    word: el.textContent,
+    xPct: (parseInt(el.style.left) || 0) / bw,
+    yPct: (parseInt(el.style.top) || 0) / bh,
+    punct: el.classList.contains('punct'),
+    z: parseInt(el.style.zIndex) || 2
+  }));
+}
+
+function broadcastBoard(playerIdx) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  clearTimeout(sendThrottle);
+  sendThrottle = setTimeout(() => {
+    ws.send(JSON.stringify({
+      type: 'board_update',
+      playerIndex: playerIdx,
+      magnets: serializeBoard(playerIdx)
+    }));
+  }, 30);
+}
+
+// ── Dragging ──
+function makeDraggable(el, board, playerIdx) {
+  let sx, sy, sl, st, dragging = false;
+  function onDown(e) {
+    e.preventDefault();
+    dragging = true;
+    el.style.zIndex = ++maxZ;
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    sx = cx; sy = cy;
+    sl = parseInt(el.style.left) || 0;
+    st = parseInt(el.style.top) || 0;
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onUp);
+  }
+  function onMove(e) {
+    if (!dragging) return;
+    e.preventDefault();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    const r = board.getBoundingClientRect();
+    let nx = sl + (cx - sx);
+    let ny = st + (cy - sy);
+    nx = Math.max(0, Math.min(nx, r.width - el.offsetWidth - 2));
+    ny = Math.max(0, Math.min(ny, r.height - el.offsetHeight - 2));
+    el.style.left = nx + 'px';
+    el.style.top = ny + 'px';
+    broadcastBoard(playerIdx);
+  }
+  function onUp() {
+    dragging = false;
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.removeEventListener('touchmove', onMove);
+    document.removeEventListener('touchend', onUp);
+    broadcastBoard(playerIdx);
+  }
+  el.addEventListener('mousedown', onDown);
+  el.addEventListener('touchstart', onDown, { passive: false });
+}
+
+// ── Actions ──
+function spawnPunct(playerIdx, ch) {
+  const b = boards[playerIdx];
+  const x = 10 + Math.random() * Math.max(b.clientWidth - 50, 20);
+  const y = 10 + Math.random() * Math.max(b.clientHeight - 30, 20);
+  createMagnetEl(playerIdx, ch, true, x, y);
+  broadcastBoard(playerIdx);
+}
+
+function addMore(playerIdx) {
+  const existing = new Set([...boards[playerIdx].querySelectorAll('.magnet')].map(m => m.textContent));
+  const picks = shuffle(WORD_POOL.filter(w => !existing.has(w))).slice(0, 5);
+  const b = boards[playerIdx];
+  picks.forEach(w => {
+    const x = 10 + Math.random() * Math.max(b.clientWidth - 120, 20);
+    const y = 10 + Math.random() * Math.max(b.clientHeight - 30, 20);
+    createMagnetEl(playerIdx, w, false, x, y);
+  });
+  broadcastBoard(playerIdx);
+}
+
+function resetMyBoard(playerIdx) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: 'reset', playerIndex: playerIdx }));
+  spawnBoard(playerIdx);
+}
+</script>
+</body>
+</html>
