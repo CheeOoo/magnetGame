@@ -696,7 +696,7 @@ function broadcastBoard(playerIdx) {
   }, 30);
 }
 
-// ── Dragging & Trashing Engine ──
+// ── Dragging & Trashing Engine with Edge Pass-Through ──
 function makeDraggable(el, board, playerIdx) {
   let sx, sy, sl, st, dragging = false;
   const trashZone = document.getElementById(`trash-${playerIdx}`);
@@ -715,6 +715,104 @@ function makeDraggable(el, board, playerIdx) {
     document.addEventListener('touchmove', onMove, { passive: false });
     document.addEventListener('touchend', onUp);
   }
+
+  function onMove(e) {
+    if (!dragging) return;
+    e.preventDefault();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    const r = board.getBoundingClientRect();
+    const trashRect = trashZone.getBoundingClientRect();
+    
+    let nx = sl + (cx - sx);
+    let ny = st + (cy - sy);
+    
+    // Determine the vertical range of the trash can relative to the board's top
+    const trashMinY = trashRect.top - r.top;
+    const trashMaxY = trashRect.bottom - r.top;
+    
+    // Check if the item's vertical dragging position aligns with the trash can slot
+    const isInTrashRow = (ny + el.offsetHeight > trashMinY && ny < trashMaxY);
+
+    // Apply smart edge constraints
+    if (playerIdx === 0) {
+      // Player 0 sidebar is on the RIGHT
+      nx = Math.max(0, nx); // Lock left wall
+      if (!isInTrashRow) {
+        nx = Math.min(nx, r.width - el.offsetWidth - 2); // Lock right wall everywhere else
+      } else {
+        nx = Math.min(nx, r.width + 20); // Allow overflow into the sidebar at the trash slot
+      }
+    } else {
+      // Player 1 sidebar is on the LEFT
+      nx = Math.min(nx, r.width - el.offsetWidth - 2); // Lock right wall
+      if (!isInTrashRow) {
+        nx = Math.max(0, nx); // Lock left wall everywhere else
+      } else {
+        nx = Math.max(-40, nx); // Allow negative overflow into the left sidebar at the trash slot
+      }
+    }
+
+    // Keep top and bottom locked
+    ny = Math.max(0, Math.min(ny, r.height - el.offsetHeight - 2));
+    
+    el.style.left = nx + 'px';
+    el.style.top = ny + 'px';
+
+    // Check intersection with trash can
+    const magnetRect = el.getBoundingClientRect();
+    const isOverlapping = !(magnetRect.right < trashRect.left || 
+                            magnetRect.left > trashRect.right || 
+                            magnetRect.bottom < trashRect.top || 
+                            magnetRect.top > trashRect.bottom);
+    
+    if (isOverlapping) {
+      trashZone.classList.add('hover');
+    } else {
+      trashZone.classList.remove('hover');
+    }
+    broadcastBoard(playerIdx);
+  }
+
+  function onUp() {
+    if (!dragging) return;
+    dragging = false;
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.removeEventListener('touchmove', onMove);
+    document.removeEventListener('touchend', onUp);
+
+    if (trashZone.classList.contains('hover')) {
+      trashZone.classList.remove('hover');
+      const wasPunct = el.classList.contains('punct');
+      el.remove();
+
+      if (!wasPunct) {
+        const existing = new Set([...board.querySelectorAll('.magnet')].map(m => m.textContent));
+        const available = WORD_POOL.filter(w => !existing.has(w));
+        if (available.length > 0) {
+          const newWord = shuffle(available)[0];
+          const spawnX = (playerIdx === 0) ? (15 + Math.random() * 80) : (board.clientWidth - 120 - Math.random() * 80);
+          const spawnY = Math.max(10, wordBankTopBound - 35 + (Math.random() * 20));
+          createMagnetEl(playerIdx, newWord, false, spawnX, spawnY);
+        }
+      }
+    } else {
+      // If let go inside the sidebar gap but missed the trash can, snap back into the board boundary safely
+      const r = board.getBoundingClientRect();
+      let cx = parseInt(el.style.left) || 0;
+      if (playerIdx === 0 && cx > r.width - el.offsetWidth) {
+        el.style.left = (r.width - el.offsetWidth - 4) + 'px';
+      } else if (playerIdx === 1 && cx < 0) {
+        el.style.left = '4px';
+      }
+    }
+    broadcastBoard(playerIdx);
+  }
+
+  el.addEventListener('mousedown', onDown);
+  el.addEventListener('touchstart', onDown, { passive: false });
+}
 
   function onMove(e) {
     if (!dragging) return;
