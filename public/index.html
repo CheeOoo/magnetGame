@@ -251,11 +251,11 @@
     flex-shrink: 0;
   }
   .trash-zone.hover {
-    background: #fee2e2;
-    border-color: #f87171;
-    color: #dc2626;
+    background: #fee2e2 !important;
+    border-color: #f87171 !important;
+    color: #dc2626 !important;
   }
-  .trash-zone svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .trash-zone svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 
   /* ── Magnets ── */
   .magnet {
@@ -272,6 +272,7 @@
     color: var(--text);
     z-index: 2;
     letter-spacing: 0.02em;
+    touch-action: none;
   }
   .magnet.draggable { cursor: grab; }
   .magnet.draggable:active { cursor: grabbing; }
@@ -307,7 +308,6 @@
 </head>
 <body>
 
-<!-- Lobby -->
 <div id="lobby">
   <h1>⬜ fridge poetry</h1>
   <p>Create a room and share the link with your friend, or paste a room code to join theirs.</p>
@@ -324,7 +324,6 @@
   <div id="lobby-status"></div>
 </div>
 
-<!-- Waiting for opponent -->
 <div id="waiting">
   <strong>Waiting for your friend...</strong>
   <p>Share this link:</p>
@@ -332,9 +331,7 @@
   <p style="font-size:11px;">click to copy</p>
 </div>
 
-<!-- Game -->
 <div id="game">
-  <!-- View for player 0: own board left, opponent right -->
   <div class="player-view" id="view-0">
     <div class="half" id="half-0-own">
       <div class="half-head own">
@@ -371,7 +368,6 @@
     </div>
   </div>
 
-  <!-- View for player 1: opponent left, own board right -->
   <div class="player-view" id="view-1">
     <div class="half" id="half-1-watch">
       <div class="half-head watch">
@@ -430,6 +426,9 @@ let sendThrottle = null;
 
 const boards = [document.getElementById('board-0'), document.getElementById('board-1')];
 const watchFor = [document.getElementById('watch-1'), document.getElementById('watch-0')];
+
+// Save structural data where block paragraph is located
+let wordBankTopBound = 0;
 
 // ── Routing ──
 window.addEventListener('DOMContentLoaded', () => {
@@ -504,7 +503,7 @@ function handleMessage(msg) {
   }
 
   if (msg.type === 'init') {
-    myPlayerIndex = msg.playerIndex; // Sync directly to server assignment 0 or 1
+    myPlayerIndex = msg.playerIndex;
     document.getElementById('lobby').style.display = 'none';
     document.getElementById('game').classList.add('visible');
 
@@ -568,34 +567,29 @@ function setOpponentLabel(opponentIdx, online) {
   if (dot) dot.classList.toggle('live', online);
 }
 
-// ── Strict Bottom Corner Paragraph Layout ──
-function getParagraphLayoutPositions(playerIdx, itemsToLayout, existingMagnets = []) {
+// ── Initial Block Paragraph Builder ──
+function layoutInitialParagraph(playerIdx, words) {
   const board = boards[playerIdx];
   const bw = board.clientWidth || 400;
   const bh = board.clientHeight || 300;
-  const PAD = 10;
+  const PAD = 15;
   const GAP_X = 5;
   const GAP_Y = 6;
   const MAGNET_H = 22;
 
-  // Track existing objects to append context seamlessly
-  const allItems = [...existingMagnets, ...itemsToLayout];
-
-  // Pass 1: Measure element tracking sizes
-  const measured = allItems.map(item => {
+  const measured = words.map(w => {
     const tmp = document.createElement('div');
-    tmp.className = 'magnet draggable' + (item.punct ? ' punct' : '');
-    tmp.textContent = item.word;
+    tmp.className = 'magnet draggable';
+    tmp.textContent = w;
     tmp.style.visibility = 'hidden';
     tmp.style.position = 'absolute';
     tmp.style.left = '-9999px';
     board.appendChild(tmp);
-    const width = tmp.offsetWidth || (item.word.length * 7 + 16);
+    const width = tmp.offsetWidth || (w.length * 7 + 16);
     board.removeChild(tmp);
-    return { word: item.word, punct: item.punct, width };
+    return { word: w, width };
   });
 
-  // Pass 2: Row Wrap calculations
   const maxRowW = bw - PAD * 2;
   const rows = [];
   let currentRow = [];
@@ -616,16 +610,18 @@ function getParagraphLayoutPositions(playerIdx, itemsToLayout, existingMagnets =
 
   const totalH = rows.length * MAGNET_H + (rows.length - 1) * GAP_Y;
   const startY = Math.max(PAD, bh - totalH - PAD);
+  
+  // Track this value globally so newly spawned single words know where the block boundary sits
+  wordBankTopBound = startY;
 
   const positions = [];
   rows.forEach((r, ri) => {
     let rowWidth = r.reduce((acc, curr, idx) => acc + curr.width + (idx > 0 ? GAP_X : 0), 0);
-    // Player 0 (View 0): Align Left | Player 1 (View 1): Align Right
     let cx = (playerIdx === 0) ? PAD : (bw - rowWidth - PAD);
     const cy = startY + ri * (MAGNET_H + GAP_Y);
     
     r.forEach(m => {
-      positions.push({ word: m.word, punct: m.punct, x: cx, y: cy });
+      positions.push({ word: m.word, x: cx, y: cy });
       cx += m.width + GAP_X;
     });
   });
@@ -638,29 +634,10 @@ function spawnBoard(playerIdx) {
   [...board.querySelectorAll('.magnet')].forEach(m => m.remove());
   requestAnimationFrame(() => {
     const rawWords = shuffle(WORD_POOL).slice(0, 47);
-    const items = rawWords.map(w => ({ word: w, punct: false }));
-    const positions = getParagraphLayoutPositions(playerIdx, items);
-    positions.forEach(p => createMagnetEl(playerIdx, p.word, p.punct, p.x, p.y));
+    const positions = layoutInitialParagraph(playerIdx, rawWords);
+    positions.forEach(p => createMagnetEl(playerIdx, p.word, false, p.x, p.y));
     broadcastBoard(playerIdx);
   });
-}
-
-function rebuildLayoutFromCurrent(playerIdx) {
-  const board = boards[playerIdx];
-  // Find words that haven't been moved into user-curated spaces
-  const currentMagnets = [...board.querySelectorAll('.magnet')].map(el => ({
-    word: el.textContent,
-    punct: el.classList.contains('punct'),
-    el: el
-  }));
-
-  const positions = getParagraphLayoutPositions(playerIdx, currentMagnets);
-  positions.forEach((pos, idx) => {
-    const el = currentMagnets[idx].el;
-    el.style.left = pos.x + 'px';
-    el.style.top = pos.y + 'px';
-  });
-  broadcastBoard(playerIdx);
 }
 
 function createMagnetEl(playerIdx, word, isPunct, x, y) {
@@ -719,7 +696,7 @@ function broadcastBoard(playerIdx) {
   }, 30);
 }
 
-// ── Fixed Coordinate Dragging & Trashing Space ──
+// ── Dragging & Trashing Engine ──
 function makeDraggable(el, board, playerIdx) {
   let sx, sy, sl, st, dragging = false;
   const trashZone = document.getElementById(`trash-${playerIdx}`);
@@ -754,7 +731,7 @@ function makeDraggable(el, board, playerIdx) {
     el.style.left = nx + 'px';
     el.style.top = ny + 'px';
 
-    // Global viewport collision detection bypasses coordinate mismatch bugs
+    // Global Viewport Intersection Calculations 
     const trashRect = trashZone.getBoundingClientRect();
     const magnetRect = el.getBoundingClientRect();
     
@@ -763,7 +740,11 @@ function makeDraggable(el, board, playerIdx) {
                             magnetRect.bottom < trashRect.top || 
                             magnetRect.top > trashRect.bottom);
     
-    trashZone.classList.toggle('hover', isOverlapping);
+    if (isOverlapping) {
+      trashZone.classList.add('hover');
+    } else {
+      trashZone.classList.remove('hover');
+    }
     broadcastBoard(playerIdx);
   }
 
@@ -780,17 +761,16 @@ function makeDraggable(el, board, playerIdx) {
       const wasPunct = el.classList.contains('punct');
       el.remove();
 
-      // Automatically generate clean substitutes back into alignment blocks
-      if (wasPunct) {
-        rebuildLayoutFromCurrent(playerIdx);
-      } else {
+      // Spawn a dynamic replacement word if it wasn't a standard punctuation mark
+      if (!wasPunct) {
         const existing = new Set([...board.querySelectorAll('.magnet')].map(m => m.textContent));
         const available = WORD_POOL.filter(w => !existing.has(w));
         if (available.length > 0) {
           const newWord = shuffle(available)[0];
-          // Create offscreen, add to layout system flow directly
-          createMagnetEl(playerIdx, newWord, false, 0, 0);
-          rebuildLayoutFromCurrent(playerIdx);
+          // Spawn the single word safely inside the paragraph cluster boundary area
+          const spawnX = (playerIdx === 0) ? (15 + Math.random() * 80) : (board.clientWidth - 120 - Math.random() * 80);
+          const spawnY = Math.max(10, wordBankTopBound - 35 + (Math.random() * 20));
+          createMagnetEl(playerIdx, newWord, false, spawnX, spawnY);
         }
       }
     }
@@ -801,21 +781,41 @@ function makeDraggable(el, board, playerIdx) {
   el.addEventListener('touchstart', onDown, { passive: false });
 }
 
-// ── Inlined Context Actions ──
+// ── Context Additions (Positions set out of the way) ──
 function spawnPunct(playerIdx, ch) {
-  createMagnetEl(playerIdx, ch, true, 0, 0);
-  rebuildLayoutFromCurrent(playerIdx);
+  const board = boards[playerIdx];
+  const bw = board.clientWidth || 400;
+  
+  // P1 spawns in top-left, P2 spawns in top-right corner out of the paragraph block stream
+  let targetX = (playerIdx === 0) ? 15 : (bw - 35);
+  // Introduce slightly offset cascades if multiple elements are spawned in sequence
+  targetX += (Math.random() * 25) - 12.5;
+  const targetY = 15 + (Math.random() * 25);
+  
+  createMagnetEl(playerIdx, ch, true, targetX, targetY);
+  broadcastBoard(playerIdx);
 }
 
 function addMore(playerIdx) {
   const board = boards[playerIdx];
+  const bw = board.clientWidth || 400;
   const existing = new Set([...board.querySelectorAll('.magnet')].map(m => m.textContent));
   const picks = shuffle(WORD_POOL.filter(w => !existing.has(w))).slice(0, 5);
   
-  picks.forEach(w => {
-    createMagnetEl(playerIdx, w, false, 0, 0);
+  // Add 5 words close to the paragraph workspace layout baseline without wiping positions
+  picks.forEach((w, index) => {
+    const stepX = index * 65;
+    let targetX = (playerIdx === 0) ? (15 + stepX) : (bw - 80 - stepX);
+    
+    // Safety boundary constraints checking
+    if (targetX < 10) targetX = 15;
+    if (targetX > bw - 80) targetX = bw - 85;
+
+    // Spawn inline right above the top border row threshold of the initial structural paragraph bank
+    const targetY = Math.max(10, wordBankTopBound - 35);
+    createMagnetEl(playerIdx, w, false, targetX, targetY);
   });
-  rebuildLayoutFromCurrent(playerIdx);
+  broadcastBoard(playerIdx);
 }
 
 function resetMyBoard(playerIdx) {
