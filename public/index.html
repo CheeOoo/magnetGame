@@ -307,6 +307,7 @@
 </head>
 <body>
 
+<!-- Lobby -->
 <div id="lobby">
   <h1>⬜ fridge poetry</h1>
   <p>Create a room and share the link with your friend, or paste a room code to join theirs.</p>
@@ -323,6 +324,7 @@
   <div id="lobby-status"></div>
 </div>
 
+<!-- Waiting for opponent -->
 <div id="waiting">
   <strong>Waiting for your friend...</strong>
   <p>Share this link:</p>
@@ -330,7 +332,9 @@
   <p style="font-size:11px;">click to copy</p>
 </div>
 
+<!-- Game -->
 <div id="game">
+  <!-- View for player 0: own board left, opponent right -->
   <div class="player-view" id="view-0">
     <div class="half" id="half-0-own">
       <div class="half-head own">
@@ -343,6 +347,51 @@
           <button class="sbtn punct" title="Comma" onclick="spawnPunct(0,',')"><span>,</span></button>
           <button class="sbtn punct" title="Period" onclick="spawnPunct(0,'.')"><span>.</span></button>
           <button class="sbtn punct" title="Question mark" onclick="spawnPunct(0,'?')"><span>?</span></button>
+          <div class="sep"></div>
+          <button class="sbtn" title="5 more words" onclick="addMore(0)">
+            <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button class="sbtn" title="Reset board" onclick="resetMyBoard(0)">
+            <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
+          </button>
+          <div class="trash-zone" id="trash-0" title="Drag word here to delete">
+            <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="half" id="half-0-watch">
+      <div class="half-head watch">
+        <span class="dot live" id="dot-0"></span>
+        <span id="label-0-watch">waiting for opponent...</span>
+      </div>
+      <div class="board readonly" id="watch-0">
+        <span class="readonly-label">read only</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- View for player 1: opponent left, own board right -->
+  <div class="player-view" id="view-1">
+    <div class="half" id="half-1-watch">
+      <div class="half-head watch">
+        <span class="dot live" id="dot-1"></span>
+        <span id="label-1-watch">waiting for opponent...</span>
+      </div>
+      <div class="board readonly" id="watch-1">
+        <span class="readonly-label">read only</span>
+      </div>
+    </div>
+    <div class="half" id="half-1-own">
+      <div class="half-head own">
+        <span class="dot"></span>
+        <span id="label-1-own">your board</span>
+      </div>
+      <div class="board-row">
+        <div class="sidebar left-side" id="sb-1">
+          <button class="sbtn punct" title="Comma" onclick="spawnPunct(1,',')"><span>,</span></button>
+          <button class="sbtn punct" title="Period" onclick="spawnPunct(1,'.')"><span>.</span></button>
+          <button class="sbtn punct" title="Question mark" onclick="spawnPunct(1,'?')"><span>?</span></button>
           <div class="sep"></div>
           <button class="sbtn" title="5 more words" onclick="addMore(1)">
             <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -382,7 +431,7 @@ let sendThrottle = null;
 const boards = [document.getElementById('board-0'), document.getElementById('board-1')];
 const watchFor = [document.getElementById('watch-1'), document.getElementById('watch-0')];
 
-// ── Routing: check URL for room on load ──
+// ── Routing ──
 window.addEventListener('DOMContentLoaded', () => {
   const params = new URLSearchParams(window.location.search);
   const r = params.get('room');
@@ -392,7 +441,6 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// ── Lobby ──
 function setStatus(msg) {
   document.getElementById('lobby-status').textContent = msg;
 }
@@ -429,7 +477,7 @@ function copyShareUrl() {
   });
 }
 
-// ── WebSocket ──
+// ── WebSocket Connectivity ──
 function joinRoom(id) {
   roomId = id;
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -445,13 +493,8 @@ function joinRoom(id) {
     handleMessage(msg);
   };
 
-  ws.onclose = () => {
-    setStatus('Disconnected. Refresh to reconnect.');
-  };
-
-  ws.onerror = () => {
-    setStatus('Connection error.');
-  };
+  ws.onclose = () => { setStatus('Disconnected. Refresh to reconnect.'); };
+  ws.onerror = () => { setStatus('Connection error.'); };
 }
 
 function handleMessage(msg) {
@@ -461,7 +504,7 @@ function handleMessage(msg) {
   }
 
   if (msg.type === 'init') {
-    myPlayerIndex = msg.playerIndex;
+    myPlayerIndex = msg.playerIndex; // Sync directly to server assignment 0 or 1
     document.getElementById('lobby').style.display = 'none';
     document.getElementById('game').classList.add('visible');
 
@@ -476,7 +519,11 @@ function handleMessage(msg) {
       setOpponentLabel(opponentIdx, true);
       document.getElementById('waiting').classList.remove('visible');
     } else {
-      document.getElementById('waiting').classList.add('visible');
+      if (myPlayerIndex === 0) {
+        document.getElementById('waiting').classList.add('visible');
+      } else {
+        document.getElementById('waiting').classList.remove('visible');
+      }
     }
 
     const url = `${window.location.origin}?room=${roomId}`;
@@ -513,13 +560,16 @@ function handleMessage(msg) {
 function setOpponentLabel(opponentIdx, online) {
   const labelId = myPlayerIndex === 0 ? 'label-0-watch' : 'label-1-watch';
   const dotId = myPlayerIndex === 0 ? 'dot-0' : 'dot-1';
-  document.getElementById(labelId).textContent = online ? `player ${opponentIdx + 1}'s board — live` : 'opponent disconnected';
+  const targetLabel = document.getElementById(labelId);
+  if (targetLabel) {
+    targetLabel.textContent = online ? `player ${opponentIdx + 1}'s board — live` : 'opponent disconnected';
+  }
   const dot = document.getElementById(dotId);
-  dot.classList.toggle('live', online);
+  if (dot) dot.classList.toggle('live', online);
 }
 
-// ── Board rendering ──
-function layoutWords(playerIdx, words) {
+// ── Strict Bottom Corner Paragraph Layout ──
+function getParagraphLayoutPositions(playerIdx, itemsToLayout, existingMagnets = []) {
   const board = boards[playerIdx];
   const bw = board.clientWidth || 400;
   const bh = board.clientHeight || 300;
@@ -528,36 +578,41 @@ function layoutWords(playerIdx, words) {
   const GAP_Y = 6;
   const MAGNET_H = 22;
 
-  const measured = words.map(w => {
+  // Track existing objects to append context seamlessly
+  const allItems = [...existingMagnets, ...itemsToLayout];
+
+  // Pass 1: Measure element tracking sizes
+  const measured = allItems.map(item => {
     const tmp = document.createElement('div');
-    tmp.className = 'magnet draggable';
-    tmp.textContent = w;
+    tmp.className = 'magnet draggable' + (item.punct ? ' punct' : '');
+    tmp.textContent = item.word;
     tmp.style.visibility = 'hidden';
     tmp.style.position = 'absolute';
     tmp.style.left = '-9999px';
     board.appendChild(tmp);
-    const width = tmp.offsetWidth || (w.length * 7 + 16);
+    const width = tmp.offsetWidth || (item.word.length * 7 + 16);
     board.removeChild(tmp);
-    return { word: w, width };
+    return { word: item.word, punct: item.punct, width };
   });
 
+  // Pass 2: Row Wrap calculations
   const maxRowW = bw - PAD * 2;
   const rows = [];
-  let row = [];
-  let rowW = 0;
-  
+  let currentRow = [];
+  let currentRowW = 0;
+
   measured.forEach(m => {
-    const needed = rowW === 0 ? m.width : rowW + GAP_X + m.width;
-    if (needed > maxRowW && row.length > 0) {
-      rows.push(row);
-      row = [m];
-      rowW = m.width;
+    const needed = currentRowW === 0 ? m.width : currentRowW + GAP_X + m.width;
+    if (needed > maxRowW && currentRow.length > 0) {
+      rows.push(currentRow);
+      currentRow = [m];
+      currentRowW = m.width;
     } else {
-      row.push(m);
-      rowW = needed;
+      currentRow.push(m);
+      currentRowW = needed;
     }
   });
-  if (row.length) rows.push(row);
+  if (currentRow.length) rows.push(currentRow);
 
   const totalH = rows.length * MAGNET_H + (rows.length - 1) * GAP_Y;
   const startY = Math.max(PAD, bh - totalH - PAD);
@@ -565,13 +620,12 @@ function layoutWords(playerIdx, words) {
   const positions = [];
   rows.forEach((r, ri) => {
     let rowWidth = r.reduce((acc, curr, idx) => acc + curr.width + (idx > 0 ? GAP_X : 0), 0);
-    // Player 0 (view-0): bottom-left setup
-    // Player 1 (view-1): bottom-right setup
+    // Player 0 (View 0): Align Left | Player 1 (View 1): Align Right
     let cx = (playerIdx === 0) ? PAD : (bw - rowWidth - PAD);
     const cy = startY + ri * (MAGNET_H + GAP_Y);
     
     r.forEach(m => {
-      positions.push({ word: m.word, x: cx, y: cy });
+      positions.push({ word: m.word, punct: m.punct, x: cx, y: cy });
       cx += m.width + GAP_X;
     });
   });
@@ -583,11 +637,30 @@ function spawnBoard(playerIdx) {
   const board = boards[playerIdx];
   [...board.querySelectorAll('.magnet')].forEach(m => m.remove());
   requestAnimationFrame(() => {
-    const words = shuffle(WORD_POOL).slice(0, 47);
-    const positions = layoutWords(playerIdx, words);
-    positions.forEach(p => createMagnetEl(playerIdx, p.word, false, p.x, p.y));
+    const rawWords = shuffle(WORD_POOL).slice(0, 47);
+    const items = rawWords.map(w => ({ word: w, punct: false }));
+    const positions = getParagraphLayoutPositions(playerIdx, items);
+    positions.forEach(p => createMagnetEl(playerIdx, p.word, p.punct, p.x, p.y));
     broadcastBoard(playerIdx);
   });
+}
+
+function rebuildLayoutFromCurrent(playerIdx) {
+  const board = boards[playerIdx];
+  // Find words that haven't been moved into user-curated spaces
+  const currentMagnets = [...board.querySelectorAll('.magnet')].map(el => ({
+    word: el.textContent,
+    punct: el.classList.contains('punct'),
+    el: el
+  }));
+
+  const positions = getParagraphLayoutPositions(playerIdx, currentMagnets);
+  positions.forEach((pos, idx) => {
+    const el = currentMagnets[idx].el;
+    el.style.left = pos.x + 'px';
+    el.style.top = pos.y + 'px';
+  });
+  broadcastBoard(playerIdx);
 }
 
 function createMagnetEl(playerIdx, word, isPunct, x, y) {
@@ -604,6 +677,7 @@ function createMagnetEl(playerIdx, word, isPunct, x, y) {
 
 function renderWatch(fromPlayer, magnets) {
   const watchBoard = watchFor[fromPlayer];
+  if (!watchBoard) return;
   const label = watchBoard.querySelector('.readonly-label');
   watchBoard.innerHTML = '';
   if (label) watchBoard.appendChild(label);
@@ -645,7 +719,7 @@ function broadcastBoard(playerIdx) {
   }, 30);
 }
 
-// ── Dragging & Trashing ──
+// ── Fixed Coordinate Dragging & Trashing Space ──
 function makeDraggable(el, board, playerIdx) {
   let sx, sy, sl, st, dragging = false;
   const trashZone = document.getElementById(`trash-${playerIdx}`);
@@ -671,16 +745,19 @@ function makeDraggable(el, board, playerIdx) {
     const cx = e.touches ? e.touches[0].clientX : e.clientX;
     const cy = e.touches ? e.touches[0].clientY : e.clientY;
     const r = board.getBoundingClientRect();
+    
     let nx = sl + (cx - sx);
     let ny = st + (cy - sy);
+    
     nx = Math.max(0, Math.min(nx, r.width - el.offsetWidth - 2));
     ny = Math.max(0, Math.min(ny, r.height - el.offsetHeight - 2));
     el.style.left = nx + 'px';
     el.style.top = ny + 'px';
 
-    // Check if dragging over trash can
+    // Global viewport collision detection bypasses coordinate mismatch bugs
     const trashRect = trashZone.getBoundingClientRect();
     const magnetRect = el.getBoundingClientRect();
+    
     const isOverlapping = !(magnetRect.right < trashRect.left || 
                             magnetRect.left > trashRect.right || 
                             magnetRect.bottom < trashRect.top || 
@@ -700,16 +777,21 @@ function makeDraggable(el, board, playerIdx) {
 
     if (trashZone.classList.contains('hover')) {
       trashZone.classList.remove('hover');
+      const wasPunct = el.classList.contains('punct');
       el.remove();
 
-      // Spawn a new unique substitute word in its place
-      const existing = new Set([...board.querySelectorAll('.magnet')].map(m => m.textContent));
-      const available = WORD_POOL.filter(w => !existing.has(w));
-      if (available.length > 0) {
-        const newWord = shuffle(available)[0];
-        const x = 10 + Math.random() * Math.max(board.clientWidth - 120, 20);
-        const y = 10 + Math.random() * Math.max(board.clientHeight - 80, 20);
-        createMagnetEl(playerIdx, newWord, false, x, y);
+      // Automatically generate clean substitutes back into alignment blocks
+      if (wasPunct) {
+        rebuildLayoutFromCurrent(playerIdx);
+      } else {
+        const existing = new Set([...board.querySelectorAll('.magnet')].map(m => m.textContent));
+        const available = WORD_POOL.filter(w => !existing.has(w));
+        if (available.length > 0) {
+          const newWord = shuffle(available)[0];
+          // Create offscreen, add to layout system flow directly
+          createMagnetEl(playerIdx, newWord, false, 0, 0);
+          rebuildLayoutFromCurrent(playerIdx);
+        }
       }
     }
     broadcastBoard(playerIdx);
@@ -719,25 +801,21 @@ function makeDraggable(el, board, playerIdx) {
   el.addEventListener('touchstart', onDown, { passive: false });
 }
 
-// ── Actions ──
+// ── Inlined Context Actions ──
 function spawnPunct(playerIdx, ch) {
-  const b = boards[playerIdx];
-  const x = 10 + Math.random() * Math.max(b.clientWidth - 50, 20);
-  const y = 10 + Math.random() * Math.max(b.clientHeight - 80, 20);
-  createMagnetEl(playerIdx, ch, true, x, y);
-  broadcastBoard(playerIdx);
+  createMagnetEl(playerIdx, ch, true, 0, 0);
+  rebuildLayoutFromCurrent(playerIdx);
 }
 
 function addMore(playerIdx) {
-  const existing = new Set([...boards[playerIdx].querySelectorAll('.magnet')].map(m => m.textContent));
+  const board = boards[playerIdx];
+  const existing = new Set([...board.querySelectorAll('.magnet')].map(m => m.textContent));
   const picks = shuffle(WORD_POOL.filter(w => !existing.has(w))).slice(0, 5);
-  const b = boards[playerIdx];
+  
   picks.forEach(w => {
-    const x = 10 + Math.random() * Math.max(b.clientWidth - 120, 20);
-    const y = 10 + Math.random() * Math.max(b.clientHeight - 80, 20);
-    createMagnetEl(playerIdx, w, false, x, y);
+    createMagnetEl(playerIdx, w, false, 0, 0);
   });
-  broadcastBoard(playerIdx);
+  rebuildLayoutFromCurrent(playerIdx);
 }
 
 function resetMyBoard(playerIdx) {
