@@ -417,17 +417,20 @@ function shuffle(a) {
   return b;
 }
 
-// ── State ──
+// ── State & Fixed Coordinating System Variables ──
 let ws = null;
 let myPlayerIndex = null;
 let roomId = null;
 let maxZ = 100;
 let sendThrottle = null;
 
+// Fixed universal canvas layout dimensions
+const V_WIDTH = 800;
+const V_HEIGHT = 600;
+
 const boards = [document.getElementById('board-0'), document.getElementById('board-1')];
 const watchFor = [document.getElementById('watch-1'), document.getElementById('watch-0')];
 
-// Save structural data where block paragraph is located
 let wordBankTopBound = 0;
 
 // ── Routing ──
@@ -567,16 +570,15 @@ function setOpponentLabel(opponentIdx, online) {
   if (dot) dot.classList.toggle('live', online);
 }
 
-// ── Initial Block Paragraph Builder ──
+// ── Initial Block Paragraph Builder (Now using fixed V_WIDTH / V_HEIGHT values) ──
 function layoutInitialParagraph(playerIdx, words) {
   const board = boards[playerIdx];
-  const bw = board.clientWidth || 400;
-  const bh = board.clientHeight || 300;
-  const PAD = 15;
-  const GAP_X = 5;
-  const GAP_Y = 6;
+  const PAD = 30;
+  const GAP_X = 10;
+  const GAP_Y = 12;
   const MAGNET_H = 22;
 
+  // Measure word footprints inside the fixed coordinate space template
   const measured = words.map(w => {
     const tmp = document.createElement('div');
     tmp.className = 'magnet draggable';
@@ -590,7 +592,7 @@ function layoutInitialParagraph(playerIdx, words) {
     return { word: w, width };
   });
 
-  const maxRowW = bw - PAD * 2;
+  const maxRowW = V_WIDTH - PAD * 2;
   const rows = [];
   let currentRow = [];
   let currentRowW = 0;
@@ -609,15 +611,14 @@ function layoutInitialParagraph(playerIdx, words) {
   if (currentRow.length) rows.push(currentRow);
 
   const totalH = rows.length * MAGNET_H + (rows.length - 1) * GAP_Y;
-  const startY = Math.max(PAD, bh - totalH - PAD);
+  const startY = Math.max(PAD, V_HEIGHT - totalH - PAD);
   
-  // Track this value globally so newly spawned single words know where the block boundary sits
   wordBankTopBound = startY;
 
   const positions = [];
   rows.forEach((r, ri) => {
     let rowWidth = r.reduce((acc, curr, idx) => acc + curr.width + (idx > 0 ? GAP_X : 0), 0);
-    let cx = (playerIdx === 0) ? PAD : (bw - rowWidth - PAD);
+    let cx = (playerIdx === 0) ? PAD : (V_WIDTH - rowWidth - PAD);
     const cy = startY + ri * (MAGNET_H + GAP_Y);
     
     r.forEach(m => {
@@ -640,12 +641,17 @@ function spawnBoard(playerIdx) {
   });
 }
 
-function createMagnetEl(playerIdx, word, isPunct, x, y) {
+function createMagnetEl(playerIdx, word, isPunct, xPercentOrCoord, yPercentOrCoord) {
   const el = document.createElement('div');
   el.className = 'magnet draggable' + (isPunct ? ' punct' : '');
   el.textContent = word;
-  el.style.left = x + 'px';
-  el.style.top = y + 'px';
+  
+  // If variables passed are raw layout numbers, scale them down into percentage values instantly
+  const leftPct = xPercentOrCoord > 1 ? (xPercentOrCoord / V_WIDTH) : xPercentOrCoord;
+  const topPct = yPercentOrCoord > 1 ? (yPercentOrCoord / V_HEIGHT) : yPercentOrCoord;
+
+  el.style.left = (leftPct * 100) + '%';
+  el.style.top = (topPct * 100) + '%';
   el.style.zIndex = ++maxZ;
   makeDraggable(el, boards[playerIdx], playerIdx);
   boards[playerIdx].appendChild(el);
@@ -658,14 +664,13 @@ function renderWatch(fromPlayer, magnets) {
   const label = watchBoard.querySelector('.readonly-label');
   watchBoard.innerHTML = '';
   if (label) watchBoard.appendChild(label);
-  const bw = watchBoard.clientWidth || 400;
-  const bh = watchBoard.clientHeight || 300;
+
   magnets.forEach(m => {
     const el = document.createElement('div');
     el.className = 'magnet readonly' + (m.punct ? ' punct' : '');
     el.textContent = m.word;
-    el.style.left = (m.xPct * bw) + 'px';
-    el.style.top = (m.yPct * bh) + 'px';
+    el.style.left = (m.xPct * 100) + '%';
+    el.style.top = (m.yPct * 100) + '%';
     el.style.zIndex = m.z || 2;
     watchBoard.appendChild(el);
   });
@@ -675,13 +680,18 @@ function serializeBoard(playerIdx) {
   const board = boards[playerIdx];
   const bw = board.clientWidth || 1;
   const bh = board.clientHeight || 1;
-  return [...board.querySelectorAll('.magnet')].map(el => ({
-    word: el.textContent,
-    xPct: (parseInt(el.style.left) || 0) / bw,
-    yPct: (parseInt(el.style.top) || 0) / bh,
-    punct: el.classList.contains('punct'),
-    z: parseInt(el.style.zIndex) || 2
-  }));
+  return [...board.querySelectorAll('.magnet')].map(el => {
+    // If element is natively specified in percentages, read those cleanly to avoid dynamic float mutations
+    const xPct = el.style.left.includes('%') ? parseFloat(el.style.left) / 100 : (parseInt(el.style.left) || 0) / bw;
+    const yPct = el.style.top.includes('%') ? parseFloat(el.style.top) / 100 : (parseInt(el.style.top) || 0) / bh;
+    return {
+      word: el.textContent,
+      xPct: xPct,
+      yPct: yPct,
+      punct: el.classList.contains('punct'),
+      z: parseInt(el.style.zIndex) || 2
+    };
+  });
 }
 
 function broadcastBoard(playerIdx) {
@@ -708,8 +718,12 @@ function makeDraggable(el, board, playerIdx) {
     const cx = e.touches ? e.touches[0].clientX : e.clientX;
     const cy = e.touches ? e.touches[0].clientY : e.clientY;
     sx = cx; sy = cy;
-    sl = parseInt(el.style.left) || 0;
-    st = parseInt(el.style.top) || 0;
+    
+    // Get live bounding values in pure pixels for smooth desktop dragging animations
+    const boardRect = board.getBoundingClientRect();
+    sl = el.offsetLeft;
+    st = el.offsetTop;
+    
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
     document.addEventListener('touchmove', onMove, { passive: false });
@@ -727,39 +741,32 @@ function makeDraggable(el, board, playerIdx) {
     let nx = sl + (cx - sx);
     let ny = st + (cy - sy);
     
-    // Determine the vertical range of the trash can relative to the board's top
     const trashMinY = trashRect.top - r.top;
     const trashMaxY = trashRect.bottom - r.top;
-    
-    // Check if the item's vertical dragging position aligns with the trash can slot
     const isInTrashRow = (ny + el.offsetHeight > trashMinY && ny < trashMaxY);
 
-    // Apply smart edge constraints
     if (playerIdx === 0) {
-      // Player 0 sidebar is on the RIGHT
-      nx = Math.max(0, nx); // Lock left wall
+      nx = Math.max(0, nx);
       if (!isInTrashRow) {
-        nx = Math.min(nx, r.width - el.offsetWidth - 2); // Lock right wall everywhere else
+        nx = Math.min(nx, r.width - el.offsetWidth - 2);
       } else {
-        nx = Math.min(nx, r.width + 20); // Allow overflow into the sidebar at the trash slot
+        nx = Math.min(nx, r.width + 20);
       }
     } else {
-      // Player 1 sidebar is on the LEFT
-      nx = Math.min(nx, r.width - el.offsetWidth - 2); // Lock right wall
+      nx = Math.min(nx, r.width - el.offsetWidth - 2);
       if (!isInTrashRow) {
-        nx = Math.max(0, nx); // Lock left wall everywhere else
+        nx = Math.max(0, nx);
       } else {
-        nx = Math.max(-40, nx); // Allow negative overflow into the left sidebar at the trash slot
+        nx = Math.max(-40, nx);
       }
     }
 
-    // Keep top and bottom locked
     ny = Math.max(0, Math.min(ny, r.height - el.offsetHeight - 2));
     
-    el.style.left = nx + 'px';
-    el.style.top = ny + 'px';
+    // Maintain active coordinates as clean percentage markers to enforce viewport syncing adjustments
+    el.style.left = ((nx / r.width) * 100) + '%';
+    el.style.top = ((ny / r.height) * 100) + '%';
 
-    // Check intersection with trash can
     const magnetRect = el.getBoundingClientRect();
     const isOverlapping = !(magnetRect.right < trashRect.left || 
                             magnetRect.left > trashRect.right || 
@@ -792,19 +799,19 @@ function makeDraggable(el, board, playerIdx) {
         const available = WORD_POOL.filter(w => !existing.has(w));
         if (available.length > 0) {
           const newWord = shuffle(available)[0];
-          const spawnX = (playerIdx === 0) ? (15 + Math.random() * 80) : (board.clientWidth - 120 - Math.random() * 80);
-          const spawnY = Math.max(10, wordBankTopBound - 35 + (Math.random() * 20));
+          // Spawn replacements relative to fixed canvas geometry markers
+          const spawnX = (playerIdx === 0) ? (30 + Math.random() * 120) : (V_WIDTH - 150 - Math.random() * 120);
+          const spawnY = Math.max(20, wordBankTopBound - 45 + (Math.random() * 20));
           createMagnetEl(playerIdx, newWord, false, spawnX, spawnY);
         }
       }
     } else {
-      // If let go inside the sidebar gap but missed the trash can, snap back into the board boundary safely
       const r = board.getBoundingClientRect();
-      let cx = parseInt(el.style.left) || 0;
+      let cx = el.offsetLeft;
       if (playerIdx === 0 && cx > r.width - el.offsetWidth) {
-        el.style.left = (r.width - el.offsetWidth - 4) + 'px';
+        el.style.left = (((r.width - el.offsetWidth - 4) / r.width) * 100) + '%';
       } else if (playerIdx === 1 && cx < 0) {
-        el.style.left = '4px';
+        el.style.left = '0.5%';
       }
     }
     broadcastBoard(playerIdx);
@@ -814,16 +821,11 @@ function makeDraggable(el, board, playerIdx) {
   el.addEventListener('touchstart', onDown, { passive: false });
 }
 
-// ── Context Additions (Positions set out of the way) ──
+// ── Context Additions (Configured against standard coordinates) ──
 function spawnPunct(playerIdx, ch) {
-  const board = boards[playerIdx];
-  const bw = board.clientWidth || 400;
-  
-  // P1 spawns in top-left, P2 spawns in top-right corner out of the paragraph block stream
-  let targetX = (playerIdx === 0) ? 15 : (bw - 35);
-  // Introduce slightly offset cascades if multiple elements are spawned in sequence
-  targetX += (Math.random() * 25) - 12.5;
-  const targetY = 15 + (Math.random() * 25);
+  let targetX = (playerIdx === 0) ? 30 : (V_WIDTH - 60);
+  targetX += (Math.random() * 40) - 20;
+  const targetY = 30 + (Math.random() * 40);
   
   createMagnetEl(playerIdx, ch, true, targetX, targetY);
   broadcastBoard(playerIdx);
@@ -831,21 +833,17 @@ function spawnPunct(playerIdx, ch) {
 
 function addMore(playerIdx) {
   const board = boards[playerIdx];
-  const bw = board.clientWidth || 400;
   const existing = new Set([...board.querySelectorAll('.magnet')].map(m => m.textContent));
   const picks = shuffle(WORD_POOL.filter(w => !existing.has(w))).slice(0, 5);
   
-  // Add 5 words close to the paragraph workspace layout baseline without wiping positions
   picks.forEach((w, index) => {
-    const stepX = index * 65;
-    let targetX = (playerIdx === 0) ? (15 + stepX) : (bw - 80 - stepX);
+    const stepX = index * 85;
+    let targetX = (playerIdx === 0) ? (30 + stepX) : (V_WIDTH - 120 - stepX);
     
-    // Safety boundary constraints checking
-    if (targetX < 10) targetX = 15;
-    if (targetX > bw - 80) targetX = bw - 85;
+    if (targetX < 20) targetX = 30;
+    if (targetX > V_WIDTH - 120) targetX = V_WIDTH - 130;
 
-    // Spawn inline right above the top border row threshold of the initial structural paragraph bank
-    const targetY = Math.max(10, wordBankTopBound - 35);
+    const targetY = Math.max(20, wordBankTopBound - 45);
     createMagnetEl(playerIdx, w, false, targetX, targetY);
   });
   broadcastBoard(playerIdx);
