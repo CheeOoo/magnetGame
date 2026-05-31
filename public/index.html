@@ -238,6 +238,25 @@
 
   .sep { width: 16px; height: 1px; background: var(--border); }
 
+  .trash-zone {
+    width: 26px; height: 26px;
+    border-radius: 3px;
+    border: 1px dashed var(--border-mid);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted);
+    cursor: default;
+    transition: background 0.1s, border-color 0.1s, color 0.1s;
+    margin-top: auto;
+    margin-bottom: 4px;
+    flex-shrink: 0;
+  }
+  .trash-zone.hover {
+    background: #fee2e2;
+    border-color: #f87171;
+    color: #dc2626;
+  }
+  .trash-zone svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
   /* ── Magnets ── */
   .magnet {
     position: absolute;
@@ -288,7 +307,6 @@
 </head>
 <body>
 
-<!-- Lobby -->
 <div id="lobby">
   <h1>⬜ fridge poetry</h1>
   <p>Create a room and share the link with your friend, or paste a room code to join theirs.</p>
@@ -305,7 +323,6 @@
   <div id="lobby-status"></div>
 </div>
 
-<!-- Waiting for opponent -->
 <div id="waiting">
   <strong>Waiting for your friend...</strong>
   <p>Share this link:</p>
@@ -313,9 +330,7 @@
   <p style="font-size:11px;">click to copy</p>
 </div>
 
-<!-- Game -->
 <div id="game">
-  <!-- View for player 0: own board left, opponent right -->
   <div class="player-view" id="view-0">
     <div class="half" id="half-0-own">
       <div class="half-head own">
@@ -329,54 +344,15 @@
           <button class="sbtn punct" title="Period" onclick="spawnPunct(0,'.')"><span>.</span></button>
           <button class="sbtn punct" title="Question mark" onclick="spawnPunct(0,'?')"><span>?</span></button>
           <div class="sep"></div>
-          <button class="sbtn" title="5 more words" onclick="addMore(0)">
-            <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </button>
-          <button class="sbtn" title="Reset board" onclick="resetMyBoard(0)">
-            <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
-          </button>
-        </div>
-      </div>
-    </div>
-    <div class="half" id="half-0-watch">
-      <div class="half-head watch">
-        <span class="dot live" id="dot-0"></span>
-        <span id="label-0-watch">waiting for opponent...</span>
-      </div>
-      <div class="board readonly" id="watch-0">
-        <span class="readonly-label">read only</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- View for player 1: opponent left, own board right -->
-  <div class="player-view" id="view-1">
-    <div class="half" id="half-1-watch">
-      <div class="half-head watch">
-        <span class="dot live" id="dot-1"></span>
-        <span id="label-1-watch">waiting for opponent...</span>
-      </div>
-      <div class="board readonly" id="watch-1">
-        <span class="readonly-label">read only</span>
-      </div>
-    </div>
-    <div class="half" id="half-1-own">
-      <div class="half-head own">
-        <span class="dot"></span>
-        <span id="label-1-own">your board</span>
-      </div>
-      <div class="board-row">
-        <div class="sidebar left-side" id="sb-1">
-          <button class="sbtn punct" title="Comma" onclick="spawnPunct(1,',')"><span>,</span></button>
-          <button class="sbtn punct" title="Period" onclick="spawnPunct(1,'.')"><span>.</span></button>
-          <button class="sbtn punct" title="Question mark" onclick="spawnPunct(1,'?')"><span>?</span></button>
-          <div class="sep"></div>
           <button class="sbtn" title="5 more words" onclick="addMore(1)">
             <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
           <button class="sbtn" title="Reset board" onclick="resetMyBoard(1)">
             <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
           </button>
+          <div class="trash-zone" id="trash-1" title="Drag word here to delete">
+            <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </div>
         </div>
         <div class="board" id="board-1"></div>
       </div>
@@ -404,9 +380,6 @@ let maxZ = 100;
 let sendThrottle = null;
 
 const boards = [document.getElementById('board-0'), document.getElementById('board-1')];
-// watch-0 is in view-0 (player 0's screen) and shows the opponent (player 1)
-// watch-1 is in view-1 (player 1's screen) and shows the opponent (player 0)
-// So to show playerIdx X's board on the opponent's screen: use watches[1 - X]
 const watchFor = [document.getElementById('watch-1'), document.getElementById('watch-0')];
 
 // ── Routing: check URL for room on load ──
@@ -492,14 +465,11 @@ function handleMessage(msg) {
     document.getElementById('lobby').style.display = 'none';
     document.getElementById('game').classList.add('visible');
 
-    // Show only the relevant player view
     document.getElementById('view-0').style.display = myPlayerIndex === 0 ? 'flex' : 'none';
     document.getElementById('view-1').style.display = myPlayerIndex === 1 ? 'flex' : 'none';
 
-    // Spawn own board
     spawnBoard(myPlayerIndex);
 
-    // Restore opponent board if already in state
     const opponentIdx = 1 - myPlayerIndex;
     if (msg.state && msg.state[opponentIdx] && msg.state[opponentIdx].length > 0) {
       renderWatch(opponentIdx, msg.state[opponentIdx]);
@@ -549,19 +519,73 @@ function setOpponentLabel(opponentIdx, online) {
 }
 
 // ── Board rendering ──
+function layoutWords(playerIdx, words) {
+  const board = boards[playerIdx];
+  const bw = board.clientWidth || 400;
+  const bh = board.clientHeight || 300;
+  const PAD = 10;
+  const GAP_X = 5;
+  const GAP_Y = 6;
+  const MAGNET_H = 22;
+
+  const measured = words.map(w => {
+    const tmp = document.createElement('div');
+    tmp.className = 'magnet draggable';
+    tmp.textContent = w;
+    tmp.style.visibility = 'hidden';
+    tmp.style.position = 'absolute';
+    tmp.style.left = '-9999px';
+    board.appendChild(tmp);
+    const width = tmp.offsetWidth || (w.length * 7 + 16);
+    board.removeChild(tmp);
+    return { word: w, width };
+  });
+
+  const maxRowW = bw - PAD * 2;
+  const rows = [];
+  let row = [];
+  let rowW = 0;
+  
+  measured.forEach(m => {
+    const needed = rowW === 0 ? m.width : rowW + GAP_X + m.width;
+    if (needed > maxRowW && row.length > 0) {
+      rows.push(row);
+      row = [m];
+      rowW = m.width;
+    } else {
+      row.push(m);
+      rowW = needed;
+    }
+  });
+  if (row.length) rows.push(row);
+
+  const totalH = rows.length * MAGNET_H + (rows.length - 1) * GAP_Y;
+  const startY = Math.max(PAD, bh - totalH - PAD);
+
+  const positions = [];
+  rows.forEach((r, ri) => {
+    let rowWidth = r.reduce((acc, curr, idx) => acc + curr.width + (idx > 0 ? GAP_X : 0), 0);
+    // Player 0 (view-0): bottom-left setup
+    // Player 1 (view-1): bottom-right setup
+    let cx = (playerIdx === 0) ? PAD : (bw - rowWidth - PAD);
+    const cy = startY + ri * (MAGNET_H + GAP_Y);
+    
+    r.forEach(m => {
+      positions.push({ word: m.word, x: cx, y: cy });
+      cx += m.width + GAP_X;
+    });
+  });
+
+  return positions;
+}
+
 function spawnBoard(playerIdx) {
   const board = boards[playerIdx];
   [...board.querySelectorAll('.magnet')].forEach(m => m.remove());
-  // defer so board dimensions are available after paint
   requestAnimationFrame(() => {
-    const bw = board.clientWidth || 400;
-    const bh = board.clientHeight || 300;
     const words = shuffle(WORD_POOL).slice(0, 47);
-    words.forEach(w => {
-      const x = 10 + Math.random() * Math.max(bw - 120, 40);
-      const y = 10 + Math.random() * Math.max(bh - 30, 40);
-      createMagnetEl(playerIdx, w, false, x, y);
-    });
+    const positions = layoutWords(playerIdx, words);
+    positions.forEach(p => createMagnetEl(playerIdx, p.word, false, p.x, p.y));
     broadcastBoard(playerIdx);
   });
 }
@@ -621,9 +645,11 @@ function broadcastBoard(playerIdx) {
   }, 30);
 }
 
-// ── Dragging ──
+// ── Dragging & Trashing ──
 function makeDraggable(el, board, playerIdx) {
   let sx, sy, sl, st, dragging = false;
+  const trashZone = document.getElementById(`trash-${playerIdx}`);
+
   function onDown(e) {
     e.preventDefault();
     dragging = true;
@@ -638,6 +664,7 @@ function makeDraggable(el, board, playerIdx) {
     document.addEventListener('touchmove', onMove, { passive: false });
     document.addEventListener('touchend', onUp);
   }
+
   function onMove(e) {
     if (!dragging) return;
     e.preventDefault();
@@ -650,16 +677,44 @@ function makeDraggable(el, board, playerIdx) {
     ny = Math.max(0, Math.min(ny, r.height - el.offsetHeight - 2));
     el.style.left = nx + 'px';
     el.style.top = ny + 'px';
+
+    // Check if dragging over trash can
+    const trashRect = trashZone.getBoundingClientRect();
+    const magnetRect = el.getBoundingClientRect();
+    const isOverlapping = !(magnetRect.right < trashRect.left || 
+                            magnetRect.left > trashRect.right || 
+                            magnetRect.bottom < trashRect.top || 
+                            magnetRect.top > trashRect.bottom);
+    
+    trashZone.classList.toggle('hover', isOverlapping);
     broadcastBoard(playerIdx);
   }
+
   function onUp() {
+    if (!dragging) return;
     dragging = false;
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
     document.removeEventListener('touchmove', onMove);
     document.removeEventListener('touchend', onUp);
+
+    if (trashZone.classList.contains('hover')) {
+      trashZone.classList.remove('hover');
+      el.remove();
+
+      // Spawn a new unique substitute word in its place
+      const existing = new Set([...board.querySelectorAll('.magnet')].map(m => m.textContent));
+      const available = WORD_POOL.filter(w => !existing.has(w));
+      if (available.length > 0) {
+        const newWord = shuffle(available)[0];
+        const x = 10 + Math.random() * Math.max(board.clientWidth - 120, 20);
+        const y = 10 + Math.random() * Math.max(board.clientHeight - 80, 20);
+        createMagnetEl(playerIdx, newWord, false, x, y);
+      }
+    }
     broadcastBoard(playerIdx);
   }
+
   el.addEventListener('mousedown', onDown);
   el.addEventListener('touchstart', onDown, { passive: false });
 }
@@ -668,7 +723,7 @@ function makeDraggable(el, board, playerIdx) {
 function spawnPunct(playerIdx, ch) {
   const b = boards[playerIdx];
   const x = 10 + Math.random() * Math.max(b.clientWidth - 50, 20);
-  const y = 10 + Math.random() * Math.max(b.clientHeight - 30, 20);
+  const y = 10 + Math.random() * Math.max(b.clientHeight - 80, 20);
   createMagnetEl(playerIdx, ch, true, x, y);
   broadcastBoard(playerIdx);
 }
@@ -679,7 +734,7 @@ function addMore(playerIdx) {
   const b = boards[playerIdx];
   picks.forEach(w => {
     const x = 10 + Math.random() * Math.max(b.clientWidth - 120, 20);
-    const y = 10 + Math.random() * Math.max(b.clientHeight - 30, 20);
+    const y = 10 + Math.random() * Math.max(b.clientHeight - 80, 20);
     createMagnetEl(playerIdx, w, false, x, y);
   });
   broadcastBoard(playerIdx);
