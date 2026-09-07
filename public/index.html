@@ -973,36 +973,47 @@ function broadcastBoard(playerIdx) {
 // word no real magnet can have. The receiver detects that marker and
 // routes it to the cursor overlay WITHOUT touching the rendered board.
 const CURSOR_MARKER = '\u0000__cursor__';
-let cursorSendThrottle = null;
+let lastCursorSendTime = 0;
+const CURSOR_SEND_INTERVAL = 40; // ms between live cursor pings
 
 function broadcastCursorOnly(playerIdx) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  clearTimeout(cursorSendThrottle);
-  cursorSendThrottle = setTimeout(() => {
-    const pos = lastCursorPos[playerIdx];
-    // No position (mouse left the board) still needs to be sent so the
-    // opponent's cursor overlay clears — send xPct/yPct as -1 as an
-    // "off-board" flag rather than skipping the message.
-    const cursorMagnet = {
-      word: CURSOR_MARKER,
-      xPct: pos ? pos.xPct : -1,
-      yPct: pos ? pos.yPct : -1,
-      punct: false,
-      custom: false,
-      z: 0
-    };
-    ws.send(JSON.stringify({
-      type: 'board_update',
-      playerIndex: playerIdx,
-      magnets: [cursorMagnet]
-    }));
-  }, 40);
+  const now = performance.now();
+  if (now - lastCursorSendTime < CURSOR_SEND_INTERVAL) return;
+  lastCursorSendTime = now;
+
+  const pos = lastCursorPos[playerIdx];
+  // No position (mouse left the board) still needs to be sent so the
+  // opponent's cursor overlay clears — send xPct/yPct as -1 as an
+  // "off-board" flag rather than skipping the message.
+  const cursorMagnet = {
+    word: CURSOR_MARKER,
+    xPct: pos ? pos.xPct : -1,
+    yPct: pos ? pos.yPct : -1,
+    punct: false,
+    custom: false,
+    z: 0
+  };
+  ws.send(JSON.stringify({
+    type: 'board_update',
+    playerIndex: playerIdx,
+    magnets: [cursorMagnet]
+  }));
 }
 
 const lastCursorPos = [null, null]; // {xPct, yPct} or null when off-board
 
 function trackCursor(playerIdx) {
   const board = boards[playerIdx];
+  let trailingFlush = null;
+
+  function scheduleTrailingFlush() {
+    clearTimeout(trailingFlush);
+    trailingFlush = setTimeout(() => {
+      lastCursorSendTime = 0; // force the next send through immediately
+      broadcastCursorOnly(playerIdx);
+    }, CURSOR_SEND_INTERVAL + 10);
+  }
 
   function updatePos(e) {
     const r = board.getBoundingClientRect();
@@ -1013,10 +1024,13 @@ function trackCursor(playerIdx) {
     if (xPct < 0 || xPct > 1 || yPct < 0 || yPct > 1) return;
     lastCursorPos[playerIdx] = { xPct, yPct };
     broadcastCursorOnly(playerIdx);
+    scheduleTrailingFlush();
   }
 
   function clearPos() {
+    clearTimeout(trailingFlush);
     lastCursorPos[playerIdx] = null;
+    lastCursorSendTime = 0;
     broadcastCursorOnly(playerIdx);
   }
 
