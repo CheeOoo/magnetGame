@@ -293,6 +293,32 @@
   .magnet.punct { color: var(--text); font-size: 13px; min-width: 20px; text-align: center; }
   .magnet.custom { border-color: #a78bfa; box-shadow: inset 0 0 0 1px rgba(167,139,250,0.35); }
 
+  /* ── Remote cursor ── */
+  .remote-cursor {
+    position: absolute;
+    z-index: 900;
+    pointer-events: none;
+    transform: translate(-2px, -2px);
+    transition: left 0.08s linear, top 0.08s linear, opacity 0.15s ease;
+  }
+  .remote-cursor svg {
+    display: block;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.25));
+  }
+  .remote-cursor .cursor-tag {
+    position: absolute;
+    top: 16px;
+    left: 14px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 9px;
+    font-weight: 700;
+    color: #fff;
+    padding: 1px 5px;
+    border-radius: 3px;
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+  }
+
   /* ── Waiting overlay ── */
   #waiting {
     display: none;
@@ -737,6 +763,7 @@ function handleMessage(msg) {
     document.getElementById('view-1').style.display = myPlayerIndex === 1 ? 'flex' : 'none';
 
     spawnBoard(myPlayerIndex);
+    trackCursor(myPlayerIndex);
 
     const opponentIdx = 1 - myPlayerIndex;
     if (msg.state && msg.state[opponentIdx] && msg.state[opponentIdx].length > 0) {
@@ -772,6 +799,7 @@ function handleMessage(msg) {
   if (msg.type === 'board_update') {
     if (msg.playerIndex !== myPlayerIndex) {
       renderWatch(msg.playerIndex, msg.magnets);
+      renderRemoteCursor(msg.playerIndex, msg.cursor);
     }
   }
 
@@ -886,6 +914,7 @@ function renderWatch(fromPlayer, magnets) {
   const watchBoard = watchFor[fromPlayer];
   if (!watchBoard) return;
   const label = watchBoard.querySelector('.readonly-label');
+  const cursorEl = watchBoard.querySelector('.remote-cursor');
   watchBoard.innerHTML = '';
   if (label) watchBoard.appendChild(label);
 
@@ -898,6 +927,8 @@ function renderWatch(fromPlayer, magnets) {
     el.style.zIndex = m.z || 2;
     watchBoard.appendChild(el);
   });
+
+  if (cursorEl) watchBoard.appendChild(cursorEl);
 }
 
 function serializeBoard(playerIdx) {
@@ -926,10 +957,82 @@ function broadcastBoard(playerIdx) {
     ws.send(JSON.stringify({
       type: 'board_update',
       playerIndex: playerIdx,
-      magnets: serializeBoard(playerIdx)
+      magnets: serializeBoard(playerIdx),
+      cursor: lastCursorPos[playerIdx]
     }));
   }, 30);
 }
+
+// ── Live cursor sharing ──
+const lastCursorPos = [null, null]; // {xPct, yPct} or null when off-board
+let cursorSendThrottle = null;
+
+function broadcastCursorOnly(playerIdx) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  clearTimeout(cursorSendThrottle);
+  cursorSendThrottle = setTimeout(() => {
+    ws.send(JSON.stringify({
+      type: 'board_update',
+      playerIndex: playerIdx,
+      magnets: serializeBoard(playerIdx),
+      cursor: lastCursorPos[playerIdx]
+    }));
+  }, 40);
+}
+
+function trackCursor(playerIdx) {
+  const board = boards[playerIdx];
+
+  function updatePos(e) {
+    const r = board.getBoundingClientRect();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    const xPct = (cx - r.left) / r.width;
+    const yPct = (cy - r.top) / r.height;
+    if (xPct < 0 || xPct > 1 || yPct < 0 || yPct > 1) return;
+    lastCursorPos[playerIdx] = { xPct, yPct };
+    broadcastCursorOnly(playerIdx);
+  }
+
+  function clearPos() {
+    lastCursorPos[playerIdx] = null;
+    broadcastCursorOnly(playerIdx);
+  }
+
+  board.addEventListener('mousemove', updatePos);
+  board.addEventListener('mouseleave', clearPos);
+  board.addEventListener('touchmove', updatePos, { passive: true });
+  board.addEventListener('touchend', clearPos);
+}
+
+function renderRemoteCursor(fromPlayer, cursor) {
+  const watchBoard = watchFor[fromPlayer];
+  if (!watchBoard) return;
+  let cursorEl = watchBoard.querySelector('.remote-cursor');
+
+  if (!cursor) {
+    if (cursorEl) cursorEl.style.opacity = '0';
+    return;
+  }
+
+  if (!cursorEl) {
+    cursorEl = document.createElement('div');
+    cursorEl.className = 'remote-cursor';
+    cursorEl.innerHTML = `
+      <svg width="16" height="20" viewBox="0 0 16 20" xmlns="http://www.w3.org/2000/svg">
+        <path d="M1 1 L1 15 L5 11.5 L7.5 17 L9.5 16 L7 10.5 L12 10.5 Z" fill="${CURSOR_COLORS[fromPlayer]}" stroke="#fff" stroke-width="1"/>
+      </svg>
+      <span class="cursor-tag" style="background:${CURSOR_COLORS[fromPlayer]}">P${fromPlayer + 1}</span>
+    `;
+    watchBoard.appendChild(cursorEl);
+  }
+
+  cursorEl.style.opacity = '1';
+  cursorEl.style.left = (cursor.xPct * 100) + '%';
+  cursorEl.style.top = (cursor.yPct * 100) + '%';
+}
+
+const CURSOR_COLORS = ['#ef4444', '#3b82f6'];
 
 // ── Dragging & Trashing Engine with Edge Pass-Through ──
 function makeDraggable(el, board, playerIdx) {
