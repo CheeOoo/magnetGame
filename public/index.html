@@ -278,6 +278,7 @@
   .magnet.draggable:active { cursor: grabbing; }
   .magnet.readonly { pointer-events: none; opacity: 0.6; }
   .magnet.punct { color: var(--text); font-size: 13px; min-width: 20px; text-align: center; }
+  .magnet.custom { border-color: #a78bfa; box-shadow: inset 0 0 0 1px rgba(167,139,250,0.35); }
 
   /* ── Waiting overlay ── */
   #waiting {
@@ -303,6 +304,123 @@
     background: var(--surface);
     color: var(--text-muted);
     cursor: pointer;
+  }
+
+  /* ── Custom word modal ── */
+  #word-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(26,26,26,0.45);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+  }
+  #word-modal-overlay.visible { display: flex; }
+
+  #word-modal {
+    position: relative;
+    background: var(--surface);
+    border: 1.5px solid var(--text);
+    border-radius: 6px;
+    width: 300px;
+    max-width: calc(100vw - 32px);
+    padding: 22px 20px 20px;
+    font-family: 'Courier New', Courier, monospace;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  }
+
+  #word-modal-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--border-mid);
+    background: var(--bg);
+    color: var(--text);
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0;
+  }
+  #word-modal-close:hover { background: var(--readonly-bg); }
+
+  #word-modal h2 {
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 14px;
+    padding-right: 20px;
+  }
+
+  .wm-stage { display: none; flex-direction: column; gap: 10px; }
+  .wm-stage.active { display: flex; }
+
+  #wm-math-problem {
+    font-size: 20px;
+    font-weight: 700;
+    text-align: center;
+    padding: 14px 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    letter-spacing: 0.03em;
+  }
+
+  .wm-input {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    padding: 9px 10px;
+    border: 1.5px solid var(--border-mid);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--text);
+    width: 100%;
+  }
+  .wm-input:focus { outline: none; border-color: var(--text); }
+
+  #wm-math-error {
+    font-size: 11px;
+    color: #dc2626;
+    min-height: 14px;
+    text-align: center;
+  }
+
+  #wm-word-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  #wm-word-count {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-align: right;
+  }
+
+  .wm-submit {
+    padding: 9px 16px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 13px;
+    font-weight: 700;
+    border: 1.5px solid var(--text);
+    background: var(--text);
+    color: var(--surface);
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 0.03em;
+  }
+  .wm-submit:hover { opacity: 0.85; }
+
+  #wm-success {
+    font-size: 12px;
+    color: #16a34a;
+    text-align: center;
   }
 </style>
 </head>
@@ -348,6 +466,9 @@
           <button class="sbtn" title="5 more words" onclick="addMore(0)">
             <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
+          <button class="sbtn" title="Add your own word" onclick="openWordModal(0)">
+            <svg viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M4 20v-2.5l10-10 2.5 2.5-10 10z"/><path d="M2 22l1.5-4.5"/></svg>
+          </button>
           <button class="sbtn" title="Reset board" onclick="resetMyBoard(0)">
             <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
           </button>
@@ -392,6 +513,9 @@
           <button class="sbtn" title="5 more words" onclick="addMore(1)">
             <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
+          <button class="sbtn" title="Add your own word" onclick="openWordModal(1)">
+            <svg viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M4 20v-2.5l10-10 2.5 2.5-10 10z"/><path d="M2 22l1.5-4.5"/></svg>
+          </button>
           <button class="sbtn" title="Reset board" onclick="resetMyBoard(1)">
             <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
           </button>
@@ -401,6 +525,29 @@
         </div>
         <div class="board" id="board-1"></div>
       </div>
+    </div>
+  </div>
+</div>
+
+<div id="word-modal-overlay">
+  <div id="word-modal">
+    <button id="word-modal-close" onclick="closeWordModal()">✕</button>
+
+    <div class="wm-stage active" id="wm-stage-math">
+      <h2>Solve to unlock</h2>
+      <div id="wm-math-problem"></div>
+      <input class="wm-input" id="wm-math-answer" type="text" inputmode="numeric" placeholder="your answer" autocomplete="off">
+      <div id="wm-math-error"></div>
+      <button class="wm-submit" onclick="submitMathAnswer()">Check</button>
+    </div>
+
+    <div class="wm-stage" id="wm-stage-word">
+      <h2>Add your word</h2>
+      <div id="wm-success">✓ solved! now type your word</div>
+      <input class="wm-input" id="wm-word-input" type="text" maxlength="10" placeholder="up to 10 characters" autocomplete="off">
+      <div id="wm-word-count">0 / 10</div>
+      <div id="wm-word-hint">will be added to your board only</div>
+      <button class="wm-submit" onclick="submitCustomWord()">Add magnet</button>
     </div>
   </div>
 </div>
@@ -641,9 +788,9 @@ function spawnBoard(playerIdx) {
   });
 }
 
-function createMagnetEl(playerIdx, word, isPunct, xPercentOrCoord, yPercentOrCoord) {
+function createMagnetEl(playerIdx, word, isPunct, xPercentOrCoord, yPercentOrCoord, isCustom) {
   const el = document.createElement('div');
-  el.className = 'magnet draggable' + (isPunct ? ' punct' : '');
+  el.className = 'magnet draggable' + (isPunct ? ' punct' : '') + (isCustom ? ' custom' : '');
   el.textContent = word;
   
   // If variables passed are raw layout numbers, scale them down into percentage values instantly
@@ -667,7 +814,7 @@ function renderWatch(fromPlayer, magnets) {
 
   magnets.forEach(m => {
     const el = document.createElement('div');
-    el.className = 'magnet readonly' + (m.punct ? ' punct' : '');
+    el.className = 'magnet readonly' + (m.punct ? ' punct' : '') + (m.custom ? ' custom' : '');
     el.textContent = m.word;
     el.style.left = (m.xPct * 100) + '%';
     el.style.top = (m.yPct * 100) + '%';
@@ -689,6 +836,7 @@ function serializeBoard(playerIdx) {
       xPct: xPct,
       yPct: yPct,
       punct: el.classList.contains('punct'),
+      custom: el.classList.contains('custom'),
       z: parseInt(el.style.zIndex) || 2
     };
   });
@@ -792,9 +940,10 @@ function makeDraggable(el, board, playerIdx) {
     if (trashZone.classList.contains('hover')) {
       trashZone.classList.remove('hover');
       const wasPunct = el.classList.contains('punct');
+      const wasCustom = el.classList.contains('custom');
       el.remove();
 
-      if (!wasPunct) {
+      if (!wasPunct && !wasCustom) {
         const existing = new Set([...board.querySelectorAll('.magnet')].map(m => m.textContent));
         const available = WORD_POOL.filter(w => !existing.has(w));
         if (available.length > 0) {
@@ -854,6 +1003,131 @@ function resetMyBoard(playerIdx) {
   ws.send(JSON.stringify({ type: 'reset', playerIndex: playerIdx }));
   spawnBoard(playerIdx);
 }
+
+// ── Custom Word Modal (math-gated) ──
+let wmTargetPlayer = null;
+let wmCurrentAnswer = null;
+
+function generateMathProblem() {
+  // Build small "tricky" arithmetic like 8/2(2+2), mixing implicit multiplication,
+  // parentheses and division so order-of-operations actually matters.
+  const templates = [
+    () => {
+      const a = randInt(2, 9), b = randInt(1, 4), c = randInt(1, 4);
+      // a / b(c+b)  -> division binds only to a/b, then multiplied by (c+b)
+      const inner = c + b;
+      const expr = `${a * b}/${b}(${c}+${b})`;
+      const answer = (a * b / b) * inner;
+      return { expr, answer };
+    },
+    () => {
+      const a = randInt(2, 6), b = randInt(2, 5), c = randInt(1, 6);
+      const expr = `${a}+${b}*(${c}-${b})`;
+      const answer = a + b * (c - b);
+      return { expr, answer };
+    },
+    () => {
+      const a = randInt(10, 20), b = randInt(2, 4), c = randInt(1, 5);
+      const expr = `${a}-${b}*${c}+${b}`;
+      const answer = a - b * c + b;
+      return { expr, answer };
+    },
+    () => {
+      const a = randInt(2, 9), b = randInt(2, 5);
+      const c = a * b;
+      const d = randInt(1, 4);
+      const expr = `${c}/${a}(${b}-${d})`;
+      const answer = (c / a) * (b - d);
+      return { expr, answer };
+    }
+  ];
+  const pick = templates[Math.floor(Math.random() * templates.length)]();
+  return pick;
+}
+
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function newMathProblem() {
+  const { expr, answer } = generateMathProblem();
+  wmCurrentAnswer = answer;
+  document.getElementById('wm-math-problem').textContent = expr;
+  document.getElementById('wm-math-answer').value = '';
+  document.getElementById('wm-math-error').textContent = '';
+}
+
+function openWordModal(playerIdx) {
+  wmTargetPlayer = playerIdx;
+  document.getElementById('wm-stage-math').classList.add('active');
+  document.getElementById('wm-stage-word').classList.remove('active');
+  document.getElementById('wm-word-input').value = '';
+  document.getElementById('wm-word-count').textContent = '0 / 10';
+  newMathProblem();
+  document.getElementById('word-modal-overlay').classList.add('visible');
+  setTimeout(() => document.getElementById('wm-math-answer').focus(), 30);
+}
+
+function closeWordModal() {
+  document.getElementById('word-modal-overlay').classList.remove('visible');
+  wmTargetPlayer = null;
+  wmCurrentAnswer = null;
+}
+
+function submitMathAnswer() {
+  const input = document.getElementById('wm-math-answer');
+  const val = parseFloat(input.value.trim());
+  if (isNaN(val) || val !== wmCurrentAnswer) {
+    document.getElementById('wm-math-error').textContent = 'Not quite — try this one instead.';
+    newMathProblem();
+    input.focus();
+    return;
+  }
+  document.getElementById('wm-stage-math').classList.remove('active');
+  document.getElementById('wm-stage-word').classList.add('active');
+  const wordInput = document.getElementById('wm-word-input');
+  wordInput.value = '';
+  document.getElementById('wm-word-count').textContent = '0 / 10';
+  setTimeout(() => wordInput.focus(), 30);
+}
+
+function submitCustomWord() {
+  const wordInput = document.getElementById('wm-word-input');
+  const word = wordInput.value.trim();
+  if (!word) {
+    wordInput.focus();
+    return;
+  }
+  const trimmed = word.slice(0, 10);
+  const playerIdx = wmTargetPlayer;
+  closeWordModal();
+  if (playerIdx === null) return;
+
+  const targetX = playerIdx === 0
+    ? 30 + Math.random() * 150
+    : V_WIDTH - 180 - Math.random() * 150;
+  const targetY = Math.max(20, wordBankTopBound - 45 + (Math.random() * 20));
+
+  createMagnetEl(playerIdx, trimmed, false, targetX, targetY, true);
+  broadcastBoard(playerIdx);
+}
+
+document.getElementById('wm-word-input').addEventListener('input', (e) => {
+  if (e.target.value.length > 10) e.target.value = e.target.value.slice(0, 10);
+  document.getElementById('wm-word-count').textContent = `${e.target.value.length} / 10`;
+});
+
+document.getElementById('wm-math-answer').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') submitMathAnswer();
+});
+
+document.getElementById('wm-word-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') submitCustomWord();
+});
+
+document.getElementById('word-modal-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'word-modal-overlay') closeWordModal();
+});
 </script>
 </body>
 </html>
