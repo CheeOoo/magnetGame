@@ -257,18 +257,20 @@
   }
   .trash-zone svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 
-  .sbtn.scissors-btn { position: relative; }
+  .sbtn.scissors-btn { position: relative; margin-bottom: 12px; }
   .sbtn.scissors-btn:disabled { cursor: default; opacity: 0.45; }
   .sbtn.scissors-btn:disabled:hover { background: var(--surface); }
   #cooldown-0, #cooldown-1 {
     position: absolute;
-    bottom: -13px;
+    top: 100%;
+    margin-top: 2px;
     left: 50%;
     transform: translateX(-50%);
     font-size: 8px;
     color: var(--text-muted);
     white-space: nowrap;
     letter-spacing: 0;
+    pointer-events: none;
   }
 
   /* ── Magnets ── */
