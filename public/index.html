@@ -798,8 +798,13 @@ function handleMessage(msg) {
 
   if (msg.type === 'board_update') {
     if (msg.playerIndex !== myPlayerIndex) {
-      renderWatch(msg.playerIndex, msg.magnets);
-      renderRemoteCursor(msg.playerIndex, msg.cursor);
+      if (msg.magnets && msg.magnets.length === 1 && msg.magnets[0].word === CURSOR_MARKER) {
+        const m = msg.magnets[0];
+        const cursor = (m.xPct < 0 || m.yPct < 0) ? null : { xPct: m.xPct, yPct: m.yPct };
+        renderRemoteCursor(msg.playerIndex, cursor);
+      } else {
+        renderWatch(msg.playerIndex, msg.magnets);
+      }
     }
   }
 
@@ -957,28 +962,44 @@ function broadcastBoard(playerIdx) {
     ws.send(JSON.stringify({
       type: 'board_update',
       playerIndex: playerIdx,
-      magnets: serializeBoard(playerIdx),
-      cursor: lastCursorPos[playerIdx]
+      magnets: serializeBoard(playerIdx)
     }));
   }, 30);
 }
 
-// ── Live cursor sharing ──
-const lastCursorPos = [null, null]; // {xPct, yPct} or null when off-board
+// ── Live cursor sharing (smuggled through the magnets field, since the
+// server relay is unknown and only that field is proven to survive it) ──
+// A cursor-only ping sends a single disguised "magnet" carrying a marker
+// word no real magnet can have. The receiver detects that marker and
+// routes it to the cursor overlay WITHOUT touching the rendered board.
+const CURSOR_MARKER = '\u0000__cursor__';
 let cursorSendThrottle = null;
 
 function broadcastCursorOnly(playerIdx) {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   clearTimeout(cursorSendThrottle);
   cursorSendThrottle = setTimeout(() => {
+    const pos = lastCursorPos[playerIdx];
+    // No position (mouse left the board) still needs to be sent so the
+    // opponent's cursor overlay clears — send xPct/yPct as -1 as an
+    // "off-board" flag rather than skipping the message.
+    const cursorMagnet = {
+      word: CURSOR_MARKER,
+      xPct: pos ? pos.xPct : -1,
+      yPct: pos ? pos.yPct : -1,
+      punct: false,
+      custom: false,
+      z: 0
+    };
     ws.send(JSON.stringify({
       type: 'board_update',
       playerIndex: playerIdx,
-      magnets: serializeBoard(playerIdx),
-      cursor: lastCursorPos[playerIdx]
+      magnets: [cursorMagnet]
     }));
   }, 40);
 }
+
+const lastCursorPos = [null, null]; // {xPct, yPct} or null when off-board
 
 function trackCursor(playerIdx) {
   const board = boards[playerIdx];
