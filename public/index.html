@@ -257,6 +257,20 @@
   }
   .trash-zone svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 
+  .sbtn.scissors-btn { position: relative; }
+  .sbtn.scissors-btn:disabled { cursor: default; opacity: 0.45; }
+  .sbtn.scissors-btn:disabled:hover { background: var(--surface); }
+  #cooldown-0, #cooldown-1 {
+    position: absolute;
+    bottom: -13px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 8px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    letter-spacing: 0;
+  }
+
   /* ── Magnets ── */
   .magnet {
     position: absolute;
@@ -422,6 +436,55 @@
     color: #16a34a;
     text-align: center;
   }
+
+  /* ── Cut mode ── */
+  .magnet.cutting {
+    z-index: 500 !important;
+    box-shadow: 0 0 0 2px #f59e0b, 0 4px 10px rgba(0,0,0,0.15);
+    cursor: default;
+  }
+  .magnet.cutting .cut-letter {
+    display: inline-block;
+    position: relative;
+  }
+  .magnet.cutting .cut-gap {
+    display: inline-block;
+    width: 6px;
+    position: relative;
+    cursor: pointer;
+  }
+  .magnet.cutting .cut-gap::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    bottom: -4px;
+    left: 1px;
+    width: 2px;
+    background: #d6d3cc;
+    border-radius: 1px;
+  }
+  .magnet.cutting .cut-gap:hover::before {
+    background: #f59e0b;
+    width: 3px;
+  }
+
+  #cut-cancel-hint {
+    position: fixed;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--text);
+    color: var(--surface);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 11px;
+    padding: 7px 14px;
+    border-radius: 20px;
+    z-index: 1500;
+    display: none;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+  }
+  #cut-cancel-hint.visible { display: block; }
 </style>
 </head>
 <body>
@@ -462,12 +525,17 @@
           <button class="sbtn punct" title="Comma" onclick="spawnPunct(0,',')"><span>,</span></button>
           <button class="sbtn punct" title="Period" onclick="spawnPunct(0,'.')"><span>.</span></button>
           <button class="sbtn punct" title="Question mark" onclick="spawnPunct(0,'?')"><span>?</span></button>
+          <button class="sbtn punct" title="Ampersand" onclick="spawnPunct(0,'&amp;')"><span>&amp;</span></button>
           <div class="sep"></div>
           <button class="sbtn" title="5 more words" onclick="addMore(0)">
             <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
           <button class="sbtn" title="Add your own word" onclick="openWordModal(0)">
             <svg viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M4 20v-2.5l10-10 2.5 2.5-10 10z"/><path d="M2 22l1.5-4.5"/></svg>
+          </button>
+          <button class="sbtn scissors-btn" id="scissors-0" title="Cut a word" onclick="enterCutMode(0)">
+            <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+            <span id="cooldown-0"></span>
           </button>
           <button class="sbtn" title="Reset board" onclick="resetMyBoard(0)">
             <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
@@ -509,12 +577,17 @@
           <button class="sbtn punct" title="Comma" onclick="spawnPunct(1,',')"><span>,</span></button>
           <button class="sbtn punct" title="Period" onclick="spawnPunct(1,'.')"><span>.</span></button>
           <button class="sbtn punct" title="Question mark" onclick="spawnPunct(1,'?')"><span>?</span></button>
+          <button class="sbtn punct" title="Ampersand" onclick="spawnPunct(1,'&amp;')"><span>&amp;</span></button>
           <div class="sep"></div>
           <button class="sbtn" title="5 more words" onclick="addMore(1)">
             <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
           <button class="sbtn" title="Add your own word" onclick="openWordModal(1)">
             <svg viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M4 20v-2.5l10-10 2.5 2.5-10 10z"/><path d="M2 22l1.5-4.5"/></svg>
+          </button>
+          <button class="sbtn scissors-btn" id="scissors-1" title="Cut a word" onclick="enterCutMode(1)">
+            <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+            <span id="cooldown-1"></span>
           </button>
           <button class="sbtn" title="Reset board" onclick="resetMyBoard(1)">
             <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
@@ -528,6 +601,8 @@
     </div>
   </div>
 </div>
+
+<div id="cut-cancel-hint" onclick="exitCutMode()">cutting — click a gap to split, or click here to cancel</div>
 
 <div id="word-modal-overlay">
   <div id="word-modal">
@@ -792,6 +867,7 @@ function createMagnetEl(playerIdx, word, isPunct, xPercentOrCoord, yPercentOrCoo
   const el = document.createElement('div');
   el.className = 'magnet draggable' + (isPunct ? ' punct' : '') + (isCustom ? ' custom' : '');
   el.textContent = word;
+  el.dataset.word = word;
   
   // If variables passed are raw layout numbers, scale them down into percentage values instantly
   const leftPct = xPercentOrCoord > 1 ? (xPercentOrCoord / V_WIDTH) : xPercentOrCoord;
@@ -832,7 +908,7 @@ function serializeBoard(playerIdx) {
     const xPct = el.style.left.includes('%') ? parseFloat(el.style.left) / 100 : (parseInt(el.style.left) || 0) / bw;
     const yPct = el.style.top.includes('%') ? parseFloat(el.style.top) / 100 : (parseInt(el.style.top) || 0) / bh;
     return {
-      word: el.textContent,
+      word: el.dataset.word || el.textContent,
       xPct: xPct,
       yPct: yPct,
       punct: el.classList.contains('punct'),
@@ -860,6 +936,12 @@ function makeDraggable(el, board, playerIdx) {
   const trashZone = document.getElementById(`trash-${playerIdx}`);
 
   function onDown(e) {
+    if (cutModeActive && cutModePlayer === playerIdx) {
+      e.preventDefault();
+      e.stopPropagation();
+      enterCutSelection(el, playerIdx);
+      return;
+    }
     e.preventDefault();
     dragging = true;
     el.style.zIndex = ++maxZ;
@@ -1128,6 +1210,139 @@ document.getElementById('wm-word-input').addEventListener('keydown', (e) => {
 document.getElementById('word-modal-overlay').addEventListener('click', (e) => {
   if (e.target.id === 'word-modal-overlay') closeWordModal();
 });
+
+// ── Scissors: cut a magnet at any letter boundary, with per-player cooldown ──
+const SCISSORS_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+const scissorsCooldownUntil = [0, 0];
+let cutModeActive = false;
+let cutModePlayer = null;
+let cutSelectedEl = null;
+
+function isScissorsReady(playerIdx) {
+  return Date.now() >= scissorsCooldownUntil[playerIdx];
+}
+
+function formatCooldown(ms) {
+  const totalSec = Math.ceil(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function updateScissorsButtons() {
+  for (const idx of [0, 1]) {
+    const btn = document.getElementById(`scissors-${idx}`);
+    const label = document.getElementById(`cooldown-${idx}`);
+    if (!btn || !label) continue;
+    const remaining = scissorsCooldownUntil[idx] - Date.now();
+    if (remaining > 0) {
+      btn.disabled = true;
+      label.textContent = formatCooldown(remaining);
+    } else {
+      btn.disabled = false;
+      label.textContent = '';
+    }
+  }
+}
+setInterval(updateScissorsButtons, 500);
+
+function enterCutMode(playerIdx) {
+  if (!isScissorsReady(playerIdx)) return;
+  if (cutModeActive) {
+    exitCutMode();
+  }
+  cutModeActive = true;
+  cutModePlayer = playerIdx;
+  document.getElementById('cut-cancel-hint').classList.add('visible');
+}
+
+function exitCutMode() {
+  cutModeActive = false;
+  cutModePlayer = null;
+  if (cutSelectedEl) {
+    restoreMagnetDisplay(cutSelectedEl);
+    cutSelectedEl = null;
+  }
+  document.getElementById('cut-cancel-hint').classList.remove('visible');
+}
+
+function restoreMagnetDisplay(el) {
+  el.classList.remove('cutting');
+  el.textContent = el.dataset.word;
+}
+
+function enterCutSelection(el, playerIdx) {
+  // Only plain word magnets can be cut (not punctuation, needs 2+ letters)
+  if (el.classList.contains('punct')) return;
+  const word = el.dataset.word || el.textContent;
+  if (word.length < 2) return;
+
+  if (cutSelectedEl && cutSelectedEl !== el) {
+    restoreMagnetDisplay(cutSelectedEl);
+  }
+  cutSelectedEl = el;
+  el.classList.add('cutting');
+  el.innerHTML = '';
+
+  const letters = word.split('');
+  letters.forEach((ch, i) => {
+    const letterSpan = document.createElement('span');
+    letterSpan.className = 'cut-letter';
+    letterSpan.textContent = ch;
+    el.appendChild(letterSpan);
+
+    if (i < letters.length - 1) {
+      const gap = document.createElement('span');
+      gap.className = 'cut-gap';
+      gap.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        performCut(el, playerIdx, word, i + 1);
+      });
+      gap.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        performCut(el, playerIdx, word, i + 1);
+      }, { passive: false });
+      el.appendChild(gap);
+    }
+  });
+}
+
+function performCut(el, playerIdx, word, splitIndex) {
+  const left = word.slice(0, splitIndex);
+  const right = word.slice(splitIndex);
+  const wasCustom = el.classList.contains('custom');
+
+  const leftPct = parseFloat(el.style.left) / 100;
+  const topPct = parseFloat(el.style.top) / 100;
+  const board = boards[playerIdx];
+  const r = board.getBoundingClientRect();
+  const baseX = leftPct * r.width;
+  const baseY = topPct * r.height;
+
+  el.remove();
+
+  const offsetPx = 46;
+  const leftX = playerIdx === 0 ? baseX : Math.max(0, baseX - offsetPx);
+  const rightX = playerIdx === 0 ? baseX + offsetPx : baseX;
+
+  const clampX = (x) => Math.max(0, Math.min(x, r.width - 30));
+  const clampY = (y) => Math.max(0, Math.min(y, r.height - 24));
+
+  const leftPxX = clampX(leftX);
+  const rightPxX = clampX(rightX);
+  const y = clampY(baseY);
+
+  createMagnetEl(playerIdx, left, false, leftPxX / r.width, y / r.height, wasCustom);
+  createMagnetEl(playerIdx, right, false, rightPxX / r.width, y / r.height, wasCustom);
+
+  scissorsCooldownUntil[playerIdx] = Date.now() + SCISSORS_COOLDOWN_MS;
+  updateScissorsButtons();
+
+  exitCutMode();
+  broadcastBoard(playerIdx);
+}
 </script>
 </body>
 </html>
